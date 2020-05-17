@@ -10,14 +10,50 @@
 #include "glog/logging.h"
 #include "gflags/gflags.h"
 #include "blocks.pb.h"
+#include <sys/stat.h>
+#include <iostream>
+#include <capstone/capstone.h>
+
 
 using namespace Dyninst;
 using namespace SymtabAPI;
+using namespace std;
+
+void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offset){
+	struct stat results;
+	size_t code_size;
+	if (stat("/data/testsuite/libs/gcc_O2/libc-2.27.so.strip", &results) == 0) {
+		code_size = results.st_size;
+	}
+	std::ifstream handleFile ("/data/testsuite/libs/gcc_O2/libc-2.27.so.strip", std::ios::in | ios::binary);
+	char buffer[code_size];
+	handleFile.read(buffer, code_size);
+
+
+	//uint8_t code_buffer[code_size];
+	//for (int i = 0; i < code_size; ++i) {
+	//	code_buffer[i] = (uint8_t) buffer[i];
+	//}
+	//std::cout << code_size << "  " << code_buffer[10000] << std::endl;
+	csh dis;
+	cs_insn *ins;
+	cs_open(CS_ARCH_X86, CS_MODE_64, &dis);
+	uint64_t pcaddr = (uint64_t) addr_start;
+	uint64_t off = (uint64_t)addr_start - offset;
+	uint8_t const *code = (uint8_t *) &buffer[off];
+	size_t size = size_t(addr_end - addr_start);
+	ins = cs_malloc(dis);
+	while(cs_disasm_iter(dis, &code, &size, &pcaddr, ins)){
+		cout << ins->id << endl;
+		exit(1);
+	}
+
+
+}
 
 
 std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj){
 	std::set<Dyninst::Address> seen;
-	//std::set<Dyninst::Blocks> block_set;
 	int count = 0;
 	std::map<unsigned long, unsigned long> block_list;
 	for (auto func:codeobj.funcs()){
@@ -25,35 +61,16 @@ std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &co
 			continue;
 		}
 		seen.insert(func->addr());
-		//count = count + 1;
 		
 		for (auto block: func->blocks()){
 			block_list[(unsigned long) block->start()] = (unsigned long) block->end();
-			std::cout << block->start() << "  " << block->end() << std::endl;
+			//std::cout << block->start() << "  " << block->end() << std::endl;
 			//std::cout << block->end() << std::endl;
 			//exit(1);
 		}
 	}
-	//std::map<unsigned long, unsigned long> block_res;
-	//std::map<Dyninst::Address, Dyninst::Address>::iterator it=block_list.begin();
-       	//unsigned long start = (unsigned long) it->first;
-	//while (it != block_list.end()){
-	//	int x = (unsigned long) it->second;
-	//	++it;
-	//	int y = (unsigned long) it->first;
-	//	if (y - x > 0) {
-	//		block_res[start] = x;
-	//		start = y;
-	//	}
-		//std::cout << x << " " << y << std::endl;
-	//}
-	//for  (const auto &[key, value]: block_res){
-	//	std::cout << key << " " << value << std::endl;
-		
-	//}
 	return block_list;
 }
-
 
 
 
@@ -71,9 +88,10 @@ void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input){
 	}
 }
 
+
 int main(int argc, char** argv){
 	std::set<uint64_t> pc_sets;
-	char* input_string = "/data/testsuite/libs/gcc_O2/libc-2.27.so.strip";
+	char* input_string = "/data/testsuite/clients/gcc_O2/openssl.strip";
 	getEhFrameAddrs(pc_sets, input_string);
 
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
@@ -82,15 +100,19 @@ int main(int argc, char** argv){
 	CHECK(code_obj_eh) << "Error: Fail to create ParseAPI::CodeObject";
 	code_obj_eh->parse();
 	
+	//is_inst_nop();
+	uint64_t file_offset = symtab_cs->loadAddress();
+	//cout << hex << symtab_cs->loadAddress() << endl;
 	for(auto addr : pc_sets){
 		code_obj_eh->parse(addr, true);
 	}
-	//exit(1);
-	//std::cout << count << std::endl;
+	
+	
 	std::map<unsigned long, unsigned long> block_regions;
 	block_regions=dumpCFG(*code_obj_eh);
 	std::map<unsigned long, unsigned long> gap_regions;
 	
+
 	std::vector<SymtabAPI::Region *> regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
 	std::map<Offset, unsigned long> CodeRegion;
@@ -132,8 +154,12 @@ int main(int argc, char** argv){
 	if (last_end > (unsigned long) it->second){
 		gap_regions[(unsigned long) it->second] = last_end;
 	}
-	//for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-	//	std::cout << ite->first << "  " << ite->second <<std::endl;
-	//}
+	
+	for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
+		
+		is_inst_nop(ite->first, ite->second, file_offset);
+		exit(1);
+		//std::cout << ite->first << "  " << ite->second <<std::endl;
+	}
 
 }
