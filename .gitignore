@@ -2,3 +2,7 @@
 *.lib
 *.exp
 *.exe
+*.swp
+dyninstBB_ehframe
+dyninstBB_extent
+dyninstExtend
