@@ -19,16 +19,15 @@ using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
 
-void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offset){
+void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offset, char* input){
 	struct stat results;
 	size_t code_size;
-	if (stat("/data/testsuite/libs/gcc_O2/libc-2.27.so.strip", &results) == 0) {
+	if (stat(input, &results) == 0) {
 		code_size = results.st_size;
 	}
-	std::ifstream handleFile ("/data/testsuite/libs/gcc_O2/libc-2.27.so.strip", std::ios::in | ios::binary);
+	std::ifstream handleFile (input, std::ios::in | ios::binary);
 	char buffer[code_size];
 	handleFile.read(buffer, code_size);
-
 
 	//uint8_t code_buffer[code_size];
 	//for (int i = 0; i < code_size; ++i) {
@@ -91,9 +90,9 @@ void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input){
 
 int main(int argc, char** argv){
 	std::set<uint64_t> pc_sets;
-	char* input_string = "/data/testsuite/clients/gcc_O2/openssl.strip";
+	char* input_string = argv[1];
 	getEhFrameAddrs(pc_sets, input_string);
-
+	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 	
@@ -157,7 +156,7 @@ int main(int argc, char** argv){
 	
 	for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
 		
-		is_inst_nop(ite->first, ite->second, file_offset);
+		is_inst_nop(ite->first, ite->second, file_offset, input_string);
 		exit(1);
 		//std::cout << ite->first << "  " << ite->second <<std::endl;
 	}
