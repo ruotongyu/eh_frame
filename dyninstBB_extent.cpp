@@ -56,7 +56,7 @@ void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offs
 		if (!ins->address || !ins->size) {
 			break;
 		}
-		if (is_cs_nop_ins(ins) == 1){
+		if (is_cs_nop_ins(ins) != 1){
 			res_ins.insert(pcaddr);
 		}
 	//	cout << is_cs_nop_ins(ins) << endl;
