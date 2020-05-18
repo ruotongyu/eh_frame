@@ -19,7 +19,21 @@ using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
 
-void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offset, char* input){
+
+int is_cs_nop_ins(cs_insn *ins){
+	switch(ins->id){
+		case X86_INS_NOP:
+		case X86_INS_FNOP:
+		case X86_INS_INT3:
+			return 1;
+		default:
+			return 0;
+	
+	}
+
+}
+
+void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offset, char* input, set<uint64_t> &res_ins){
 	struct stat results;
 	size_t code_size;
 	if (stat(input, &results) == 0) {
@@ -29,11 +43,6 @@ void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offs
 	char buffer[code_size];
 	handleFile.read(buffer, code_size);
 
-	//uint8_t code_buffer[code_size];
-	//for (int i = 0; i < code_size; ++i) {
-	//	code_buffer[i] = (uint8_t) buffer[i];
-	//}
-	//std::cout << code_size << "  " << code_buffer[10000] << std::endl;
 	csh dis;
 	cs_insn *ins;
 	cs_open(CS_ARCH_X86, CS_MODE_64, &dis);
@@ -41,10 +50,17 @@ void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offs
 	uint64_t off = (uint64_t)addr_start - offset;
 	uint8_t const *code = (uint8_t *) &buffer[off];
 	size_t size = size_t(addr_end - addr_start);
+	//std::cout << hex << size << "  " << offset << std::endl;
 	ins = cs_malloc(dis);
 	while(cs_disasm_iter(dis, &code, &size, &pcaddr, ins)){
-		cout << ins->id << endl;
-		exit(1);
+		if (!ins->address || !ins->size) {
+			break;
+		}
+		if (is_cs_nop_ins(ins) == 1){
+			res_ins.insert(pcaddr);
+		}
+	//	cout << is_cs_nop_ins(ins) << endl;
+
 	}
 
 
@@ -106,19 +122,18 @@ int main(int argc, char** argv){
 		code_obj_eh->parse(addr, true);
 	}
 	
-	
 	std::map<unsigned long, unsigned long> block_regions;
 	block_regions=dumpCFG(*code_obj_eh);
-	std::map<unsigned long, unsigned long> gap_regions;
 	
-
 	std::vector<SymtabAPI::Region *> regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
-	std::map<Offset, unsigned long> CodeRegion;
+	
+	std::map<unsigned long, unsigned long> gap_regions;
+	//gap_regions = gapRegions(regs, block_regions);
+	
 	std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
 	unsigned long last_end;
 	for (auto &reg: regs){
-		CodeRegion[reg->getMemOffset()] = reg->getMemSize();
 		//std::cout << reg->getRegionName() << std::endl;
 		unsigned long addr = (unsigned long) reg->getMemOffset();
 		unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
@@ -145,20 +160,21 @@ int main(int argc, char** argv){
 				break;
 			}
 		}
-		//std::cout << reg->getMemOffset() << std::endl;
-		//std::cout << addr_end << std::endl;
 		last_end = addr_end;
 	}
-	//std::cout << "Last " << last_end << " " << it->second << std::endl;
 	if (last_end > (unsigned long) it->second){
 		gap_regions[(unsigned long) it->second] = last_end;
 	}
+
+	set<uint64_t> res;
 	
 	for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
 		
-		is_inst_nop(ite->first, ite->second, file_offset, input_string);
-		exit(1);
-		//std::cout << ite->first << "  " << ite->second <<std::endl;
+		is_inst_nop(ite->first, ite->second, file_offset, input_string, res);
+	//	exit(1);
+	}
+	for (uint64_t addr : res){
+		std::cout << hex << addr <<std::endl;
 	}
 
 }
