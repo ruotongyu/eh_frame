@@ -13,6 +13,10 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <capstone/capstone.h>
+#include <Dereference.h>
+#include <InstructionAST.h>
+#include <Result.h>
+
 
 
 using namespace Dyninst;
@@ -28,9 +32,7 @@ int is_cs_nop_ins(cs_insn *ins){
 			return 1;
 		default:
 			return 0;
-	
 	}
-
 }
 
 void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offset, char* input, set<uint64_t> &res_ins){
@@ -103,6 +105,49 @@ void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input){
 	}
 }
 
+void getOperand(Dyninst::ParseAPI::CodeObject &codeobj) {
+	set<Address> constant;
+	for (auto func:codeobj.funcs()) {
+		for (auto block: func->blocks()){
+			Dyninst::ParseAPI::Block::Insns instructions;
+			block->getInsns(instructions);
+			
+			for (auto it: instructions) {
+				Dyninst::InstructionAPI::Instruction inst = it.second;
+				std::vector<InstructionAPI::Operand> operands;
+				inst.getOperands(operands);
+				for (auto operand:operands){
+					auto expr = operand.getValue();
+					if (auto imm = dynamic_cast<InstructionAPI::Immediate *>(expr.get())) {
+						Address addr = imm->eval().convert<Address>();
+						constant.insert(addr);
+						//cout << "constant Operand " << addr << endl;
+					}
+					
+					if (auto dref = dynamic_cast<InstructionAPI::Dereference *>(expr.get())){
+						//std::vector<InstructionAPI::InstructionAST::Ptr> children;
+						//dref->getChildren(children);
+						//auto d_expr = dynamic_cast<InstructionAPI::Expression *>(children[0].get());
+						//auto d_addr = d_expr->eval();
+						//constant.insert(d_addr);
+						//cout << "Dereference Evaluation: " << d_addr.val.s64val << endl;
+						
+						auto d_expr = dref->eval().convert<Address>();
+						//auto d_addr = d_expr->eval();
+	
+						//cout << "Dereference Evaluation: " << d_expr << endl;
+
+					}
+
+					//cout << "General Operand " << expr << endl;
+				}
+			}
+			//exit(1);
+		}
+	}
+
+}
+
 
 int main(int argc, char** argv){
 	std::set<uint64_t> pc_sets;
@@ -130,7 +175,7 @@ int main(int argc, char** argv){
 	
 	std::map<unsigned long, unsigned long> gap_regions;
 	//gap_regions = gapRegions(regs, block_regions);
-	
+	getOperand(*code_obj_eh);
 	std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
 	unsigned long last_end;
 	for (auto &reg: regs){
@@ -166,15 +211,15 @@ int main(int argc, char** argv){
 		gap_regions[(unsigned long) it->second] = last_end;
 	}
 
-	set<uint64_t> res;
+	//set<uint64_t> res;
 	
-	for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
+	//for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
 		
-		is_inst_nop(ite->first, ite->second, file_offset, input_string, res);
+		//is_inst_nop(ite->first, ite->second, file_offset, input_string, res);
 	//	exit(1);
-	}
-	for (uint64_t addr : res){
-		std::cout << hex << addr <<std::endl;
-	}
+	//}
+	//for (uint64_t addr : res){
+	//	std::cout << hex << addr <<std::endl;
+	//}
 
 }
