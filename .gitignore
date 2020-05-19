@@ -3,6 +3,7 @@
 *.exp
 *.exe
 *.swp
+*.swo
 dyninstBB_ehframe
 dyninstBB_extent
 dyninstExtend
