@@ -107,13 +107,22 @@ void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input){
 
 void getOperand(Dyninst::ParseAPI::CodeObject &codeobj) {
 	set<Address> constant;
+	// pc pointer
+	unsigned cur_addr = 0x0;
+	unsigned next_addr = 0x0;
 	for (auto func:codeobj.funcs()) {
 		for (auto block: func->blocks()){
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
-			
+
+			// get current address
 			for (auto it: instructions) {
 				Dyninst::InstructionAPI::Instruction inst = it.second;
+				InstructionAPI::RegisterAST thePC = InstructionAPI::RegisterAST::makePC(inst.getArch());
+
+				cur_addr = it.first;
+				next_addr = cur_addr + inst.size();
+
 				std::vector<InstructionAPI::Operand> operands;
 				inst.getOperands(operands);
 				for (auto operand:operands){
@@ -123,19 +132,26 @@ void getOperand(Dyninst::ParseAPI::CodeObject &codeobj) {
 						constant.insert(addr);
 						//cout << "constant Operand " << addr << endl;
 					}
-					
-					if (auto dref = dynamic_cast<InstructionAPI::Dereference *>(expr.get())){
-						//std::vector<InstructionAPI::InstructionAST::Ptr> children;
-						//dref->getChildren(children);
-						//auto d_expr = dynamic_cast<InstructionAPI::Expression *>(children[0].get());
-						//auto d_addr = d_expr->eval();
-						//constant.insert(d_addr);
-						//cout << "Dereference Evaluation: " << d_addr.val.s64val << endl;
-						
-						auto d_expr = dref->eval().convert<Address>();
-						//auto d_addr = d_expr->eval();
-	
-						//cout << "Dereference Evaluation: " << d_expr << endl;
+					else if (auto dref = dynamic_cast<InstructionAPI::Dereference *>(expr.get())){
+						std::vector<InstructionAPI::InstructionAST::Ptr> args;
+						dref->getChildren(args);
+
+						if (auto d_expr = dynamic_cast<InstructionAPI::Expression *>(args[0].get())){
+							std::vector<InstructionAPI::Expression::Ptr> exps;
+							d_expr->getChildren(exps);
+							Address ref_value;
+							for (auto dref_expr : exps){
+								if (auto dref_imm = dynamic_cast<InstructionAPI::Immediate *>(dref_expr.get())){
+										ref_value = dref_imm->eval().convert<Address>();
+										cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
+										}
+							}
+
+							// bind the pc value.
+							d_expr->bind(&thePC, InstructionAPI::Result(InstructionAPI::u64, next_addr));
+							ref_value = d_expr->eval().convert<Address>();
+							cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
+						}
 
 					}
 
