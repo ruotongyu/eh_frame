@@ -219,12 +219,12 @@ void getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* in
 		unsigned long addr_start = (unsigned long) reg->getMemOffset();
 		addr_start = addr_start - (unsigned long) offset; 
 		unsigned long region_size = (unsigned long) reg->getMemSize();
-		void * d_buffer = (void *) &buffer[region_size];
+		//void * d_buffer = (void *) &buffer[addr_start];
 		//cout << hex << d_buffer;
 		//cout << hex << ++d_buffer;
 		for (int i = 0; i < region_size; ++i) {
-			cout << hex << d_buffer << "  ";
-			++d_buffer;
+			void * res = (void *) buffer[addr_start + i];
+			cout << hex << res << "  ";
 		}
 		//cout << offset << endl;
 		exit(1);
