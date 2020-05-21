@@ -219,8 +219,12 @@ void getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* in
 		unsigned long addr_start = (unsigned long) reg->getMemOffset();
 		addr_start = addr_start - (unsigned long) offset; 
 		unsigned long region_size = (unsigned long) reg->getMemSize();
+		void * d_buffer = (void *) &buffer[region_size];
+		//cout << hex << d_buffer;
+		//cout << hex << ++d_buffer;
 		for (int i = 0; i < region_size; ++i) {
-			cout << hex << buffer[addr_start + i];
+			cout << hex << d_buffer << "  ";
+			++d_buffer;
 		}
 		//cout << offset << endl;
 		exit(1);
@@ -254,7 +258,7 @@ int main(int argc, char** argv){
 	std::vector<SymtabAPI::Region *> data_regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
 	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
-	//getDataRef(data_regs, file_offset, input_string);
+	getDataRef(data_regs, file_offset, input_string);
 	std::map<unsigned long, unsigned long> gap_regions;
 	map<Address, Address> ref_addr;
 	set<Address> cons_addr;
