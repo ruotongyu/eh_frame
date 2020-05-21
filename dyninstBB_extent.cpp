@@ -223,8 +223,8 @@ void getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* in
 		//cout << hex << d_buffer;
 		//cout << hex << ++d_buffer;
 		for (int i = 0; i < region_size; ++i) {
-			void * res = (void *) buffer[addr_start + i];
-			cout << hex << res << "  ";
+			void** res = (void**)(buffer + addr_start + i);
+			cout << hex << *res << "  ";
 		}
 		//cout << offset << endl;
 		exit(1);
