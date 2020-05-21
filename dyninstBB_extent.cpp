@@ -64,10 +64,49 @@ void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offs
 	//	cout << is_cs_nop_ins(ins) << endl;
 
 	}
-
-
 }
 
+bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res){
+	set<Address> seen;
+	for (auto func: codeobj.funcs()){
+		if(seen.count((unsigned long) func->addr())){
+			continue;
+		}
+		seen.insert((unsigned long) func->addr());
+		for (auto block: func->blocks()){
+			Dyninst::ParseAPI::Block::Insns instructions;
+			block->getInsns(instructions);
+			// get current address
+			for (auto it: instructions) {
+				Dyninst::InstructionAPI::Instruction inst = it.second;
+				res.insert(it.first);
+				if (!inst.isLegalInsn()){
+					//cout << std::hex << it.first << endl;
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
+void CheckInst(set<Address> addr_set, char* input_string) {
+	for (auto addr: addr_set){
+		auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
+		auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
+		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
+		code_obj_gap->parse();
+		code_obj_gap->parse(addr, true);
+		set<Address> func_res;
+		if (Inst_help(*code_obj_gap, func_res)){
+			cout << addr << endl;
+			for (auto r_f : func_res){
+				cout << std::hex << r_f << endl;
+			}
+			//cout << addr << endl;
+		}
+	}
+}
 
 std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj){
 	std::set<Dyninst::Address> seen;
@@ -105,7 +144,7 @@ void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input){
 	}
 }
 
-void getOperand(Dyninst::ParseAPI::CodeObject &codeobj) {
+set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Address> &ref_addr) {
 	set<Address> constant;
 	// pc pointer
 	unsigned cur_addr = 0x0;
@@ -130,6 +169,7 @@ void getOperand(Dyninst::ParseAPI::CodeObject &codeobj) {
 					if (auto imm = dynamic_cast<InstructionAPI::Immediate *>(expr.get())) {
 						Address addr = imm->eval().convert<Address>();
 						constant.insert(addr);
+						ref_addr[addr] = cur_addr;
 						//cout << "constant Operand " << addr << endl;
 					}
 					else if (auto dref = dynamic_cast<InstructionAPI::Dereference *>(expr.get())){
@@ -143,23 +183,47 @@ void getOperand(Dyninst::ParseAPI::CodeObject &codeobj) {
 							for (auto dref_expr : exps){
 								if (auto dref_imm = dynamic_cast<InstructionAPI::Immediate *>(dref_expr.get())){
 										ref_value = dref_imm->eval().convert<Address>();
-										cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
+										constant.insert(ref_value);
+										ref_addr[ref_value] = cur_addr;
+										//cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
 										}
 							}
 
 							// bind the pc value.
 							d_expr->bind(&thePC, InstructionAPI::Result(InstructionAPI::u64, next_addr));
 							ref_value = d_expr->eval().convert<Address>();
-							cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
+							constant.insert(ref_value);
+							ref_addr[ref_value] = cur_addr;
+							//cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
 						}
 
 					}
-
-					//cout << "General Operand " << expr << endl;
 				}
 			}
-			//exit(1);
 		}
+	}
+	return constant;
+
+}
+
+void getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input){
+	size_t code_size;
+	struct stat results;
+	if (stat(input, &results) == 0) {
+		code_size = results.st_size;
+	}
+	std::ifstream handleFile (input, std::ios::in | ios::binary);
+	char buffer[code_size];
+	handleFile.read(buffer, code_size);
+	for (auto &reg: regs){
+		unsigned long addr_start = (unsigned long) reg->getMemOffset();
+		addr_start = addr_start - (unsigned long) offset; 
+		unsigned long region_size = (unsigned long) reg->getMemSize();
+		for (int i = 0; i < region_size; ++i) {
+			cout << hex << buffer[addr_start + i];
+		}
+		//cout << offset << endl;
+		exit(1);
 	}
 
 }
@@ -187,11 +251,14 @@ int main(int argc, char** argv){
 	block_regions=dumpCFG(*code_obj_eh);
 	
 	std::vector<SymtabAPI::Region *> regs;
+	std::vector<SymtabAPI::Region *> data_regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
-	
+	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
+	//getDataRef(data_regs, file_offset, input_string);
 	std::map<unsigned long, unsigned long> gap_regions;
-	//gap_regions = gapRegions(regs, block_regions);
-	getOperand(*code_obj_eh);
+	map<Address, Address> ref_addr;
+	set<Address> cons_addr;
+	cons_addr = getOperand(*code_obj_eh, ref_addr);
 	std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
 	unsigned long last_end;
 	for (auto &reg: regs){
@@ -199,6 +266,7 @@ int main(int argc, char** argv){
 		unsigned long addr = (unsigned long) reg->getMemOffset();
 		unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
 		unsigned long start = (unsigned long) it->first;
+		//cout << "0x" << std::hex << addr << " " << addr_end << endl;
 		if (start > addr) {
 			gap_regions[addr] = start;
 		}
@@ -222,20 +290,38 @@ int main(int argc, char** argv){
 			}
 		}
 		last_end = addr_end;
+		if (it == block_regions.end()) {
+			break;
+		}
+		//cout << "0x" << std::hex << ia->first << " " << ia->second << endl;
+		//cout << "0x" << std::hex << addr << " " << addr_end << endl;
 	}
-	if (last_end > (unsigned long) it->second){
+	//for (auto res : block_regions) {
+	//	cout << "0x" << std::hex << res.first << " " << res.second << endl;
+	//}
+	//exit(1);
+	if (it != block_regions.end() && last_end > (unsigned long) it->second){
 		gap_regions[(unsigned long) it->second] = last_end;
 	}
 
 	//set<uint64_t> res;
-	
-	//for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-		
-		//is_inst_nop(ite->first, ite->second, file_offset, input_string, res);
-	//	exit(1);
+	set<unsigned long> func_list;
+	set<Address> gap_set;
+	for (auto addr: cons_addr){
+		for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
+			unsigned long c_addr = (unsigned long) addr;
+			if (c_addr > ite->first && c_addr < ite->second) {
+				gap_set.insert(addr);
+				//cout << "0x" << std::hex << c_addr << endl;
+				if (ite->second - ite->first > 10) {
+					cout << "0x" << std::hex << ite->first << " " << ite->second << endl;
+				}
+				break;
+			}
+		}
+	}
+	//CheckInst(gap_set, input_string);	
+	//for (auto addr : gap_set){
+	//	std::cout << hex << (unsigned long) ref_addr[addr] << "  " << (unsigned long) addr << std::endl;
 	//}
-	//for (uint64_t addr : res){
-	//	std::cout << hex << addr <<std::endl;
-	//}
-
 }
