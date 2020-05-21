@@ -220,7 +220,7 @@ void getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* in
 		addr_start = addr_start - (unsigned long) offset; 
 		unsigned long region_size = (unsigned long) reg->getMemSize();
 		for (int i = 0; i < region_size; ++i) {
-			cout << hex << buffer[addr_start + i];
+			cout << hex << (void*)buffer[addr_start + i];
 		}
 		//cout << offset << endl;
 		exit(1);
