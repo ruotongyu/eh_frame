@@ -16,7 +16,8 @@
 #include <Dereference.h>
 #include <InstructionAST.h>
 #include <Result.h>
-
+#include "refInf.pb.h"
+#include "blocks.pb.h"
 
 
 using namespace Dyninst;
@@ -73,13 +74,13 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res){
 			continue;
 		}
 		seen.insert((unsigned long) func->addr());
+		res.insert(func->addr());
 		for (auto block: func->blocks()){
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			// get current address
 			for (auto it: instructions) {
 				Dyninst::InstructionAPI::Instruction inst = it.second;
-				res.insert(it.first);
 				if (!inst.isLegalInsn()){
 					//cout << std::hex << it.first << endl;
 					return false;
@@ -99,9 +100,9 @@ void CheckInst(set<Address> addr_set, char* input_string) {
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
 		if (Inst_help(*code_obj_gap, func_res)){
-			cout << addr << endl;
+			cout << "Disassembly Address is 0x" << hex << addr << endl;
 			for (auto r_f : func_res){
-				cout << std::hex << r_f << endl;
+				cout << "Func  0x" <<std::hex << r_f << endl;
 			}
 			//cout << addr << endl;
 		}
@@ -206,12 +207,15 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 
 }
 
-void getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input){
+
+
+set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input){
 	size_t code_size;
 	struct stat results;
 	if (stat(input, &results) == 0) {
 		code_size = results.st_size;
 	}
+	set<Address> DataRef_res;
 	std::ifstream handleFile (input, std::ios::in | ios::binary);
 	char buffer[code_size];
 	handleFile.read(buffer, code_size);
@@ -223,19 +227,68 @@ void getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* in
 		//cout << hex << d_buffer;
 		//cout << hex << ++d_buffer;
 		for (int i = 0; i < region_size; ++i) {
+			if (i + addr_start > code_size) {
+				break;
+			}
 			Address* res = (Address*)(buffer + addr_start + i);
-			cout << hex << *res << "  ";
+			//cout << hex << *res << "  "<<endl;
+			DataRef_res.insert(*res);
 		}
-		//cout << offset << endl;
-		exit(1);
 	}
-
+	return DataRef_res;
 }
+
+void ScanGaps(map<unsigned long, unsigned long> gap_regions, map<uint64_t, uint64_t> dataRef){
+	set<Address> gap_set;
+	map<uint64_t, uint64_t>::iterator mt;
+	// serach for result in gap regions
+	for (mt = dataRef.begin(); mt != dataRef.end(); ++mt){
+		for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
+			unsigned long c_addr = (unsigned long) mt->second;
+			if (c_addr > ite->first && c_addr < ite->second) {
+				//gap_set.insert(a_addr);
+				cout << "0x" << std::hex << mt->first << " " << mt->second << endl;
+				break;
+			}
+		}
+	}
+}
+
+map<uint64_t, uint64_t> loadGroundTruth(char* input_pb, RefInf::RefList &reflist, std::vector<SymtabAPI::Region *> regs) {
+	map<uint64_t, uint64_t> target_addr;
+	std::fstream input(input_pb, std::ios::in | std::ios::binary);
+	if (!input) {
+		cout << "Could not open the file " << input_pb << endl;
+	}
+	if (!reflist.ParseFromIstream(&input)){
+		cout << "Could not load pb file" << input_pb << endl;
+	}
+	uint64_t target_va, ref_va;
+	for (int i = 0; i < reflist.ref_size(); i++){
+		const RefInf::Reference& cur_ref = reflist.ref(i);
+		ref_va = cur_ref.ref_va();
+		target_va = cur_ref.target_va();
+		//target_addr[ref_va] = target_va;
+		//cout << hex << target_va << endl;
+		for (auto &reg: regs) {
+			unsigned long addr_start = (unsigned long) reg->getMemOffset();
+			unsigned long addr_end = addr_start + (unsigned long) reg->getMemSize();
+			if (ref_va >= addr_start && ref_va <= addr_end){
+				target_addr[ref_va] = target_va;
+				//cout << hex << "0x" << ref_va << " 0x" << target_va << endl;
+				break;
+			}
+		}
+	}
+	return target_addr;
+}
+
 
 
 int main(int argc, char** argv){
 	std::set<uint64_t> pc_sets;
 	char* input_string = argv[1];
+	char* input_pb = argv[2];
 	getEhFrameAddrs(pc_sets, input_string);
 	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
@@ -258,13 +311,21 @@ int main(int argc, char** argv){
 	std::vector<SymtabAPI::Region *> data_regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
 	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
-	getDataRef(data_regs, file_offset, input_string);
+	
+	// read reference ground truth from pb file
+	map<uint64_t, uint64_t> gt_ref;
+	RefInf::RefList refs_list;
+	gt_ref = loadGroundTruth(input_pb, refs_list, data_regs);
+	//cout << "So far so good" << endl;
+	//exit(1);
+	//initialize gap regions
 	std::map<unsigned long, unsigned long> gap_regions;
 	map<Address, Address> ref_addr;
 	set<Address> cons_addr;
 	cons_addr = getOperand(*code_obj_eh, ref_addr);
 	std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
 	unsigned long last_end;
+
 	for (auto &reg: regs){
 		//std::cout << reg->getRegionName() << std::endl;
 		unsigned long addr = (unsigned long) reg->getMemOffset();
@@ -297,8 +358,6 @@ int main(int argc, char** argv){
 		if (it == block_regions.end()) {
 			break;
 		}
-		//cout << "0x" << std::hex << ia->first << " " << ia->second << endl;
-		//cout << "0x" << std::hex << addr << " " << addr_end << endl;
 	}
 	//for (auto res : block_regions) {
 	//	cout << "0x" << std::hex << res.first << " " << res.second << endl;
@@ -308,24 +367,9 @@ int main(int argc, char** argv){
 		gap_regions[(unsigned long) it->second] = last_end;
 	}
 
-	//set<uint64_t> res;
-	set<unsigned long> func_list;
-	set<Address> gap_set;
-	for (auto addr: cons_addr){
-		for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-			unsigned long c_addr = (unsigned long) addr;
-			if (c_addr > ite->first && c_addr < ite->second) {
-				gap_set.insert(addr);
-				//cout << "0x" << std::hex << c_addr << endl;
-				if (ite->second - ite->first > 10) {
-					cout << "0x" << std::hex << ite->first << " " << ite->second << endl;
-				}
-				break;
-			}
-		}
-	}
+	//initialize data reference
+	set<Address> dataRef;
+	//dataRef = getDataRef(data_regs, file_offset, input_string);
+	ScanGaps(gap_regions, gt_ref);
 	//CheckInst(gap_set, input_string);	
-	//for (auto addr : gap_set){
-	//	std::cout << hex << (unsigned long) ref_addr[addr] << "  " << (unsigned long) addr << std::endl;
-	//}
 }
