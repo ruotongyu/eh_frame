@@ -15,6 +15,7 @@ do
 	gt="gtRef_${file}"
 	gt="${gt}.pb"
 	pb=${res/$file/$gt}
+	res="${res}.strip"
 	#echo $res
 	#echo $pb
 	if [ $NUM = "0]" ]; then
