@@ -33,7 +33,7 @@ do
 	if [ $NUM = "0]" ]; then
 		echo "Result for $res"
 		#echo "./dyninstBB_extent $res $pb $bPb $flag"
-		fnum=$fnum+1
+		fnum=$((fnum+1))
 		./dyninstBB_extent $res $pb $bPb $flag
 		#exit 1
 	fi

@@ -46,16 +46,33 @@ void Target2Addr(map<uint64_t, uint64_t> gt_ref, set<uint64_t> fn_functions){
 	}
 }
 
-set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions){
+// compare the difference between two set, if flag is true return overlap function, else return difference
+set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions, bool flag){
 	set<uint64_t> res;
 	for (auto func:gt_functions){
-		if (!eh_functions.count(func) && func!=0){
-			//cout << "0x" << hex << func << endl;
-			res.insert(func);
+		if (flag) {
+			if (eh_functions.count(func) && func!=0){
+				res.insert(func);
+			}
+		} else{
+			
+			if (!eh_functions.count(func) && func!=0){
+				res.insert(func);
+			}
 		}
 	}
 	return res;
 }
+
+set<Address> unionSet(set<Address> set1, set<Address> set2){
+	for (auto item : set1) {
+		if (!set2.count(item)){
+			set2.insert(item);
+		}
+	}
+	return set2;
+}
+
 set<uint64_t> loadInfo(char* input_pb, blocks::module& module, set<uint64_t> &functions) {
 	set<uint64_t> call_inst;
 	std::fstream input(input_pb, std::ios::in | std::ios::binary);
@@ -150,8 +167,8 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 	return true;
 }
 
-void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions) {
-	
+set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions) {
+	set<uint64_t> identified_functions;
 	for (auto addr: addr_set){
 		auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 		auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
@@ -160,13 +177,15 @@ void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instruct
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
 		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions)){
-			cout << "Disassembly Address is 0x" << hex << addr << endl;
+			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			for (auto r_f : func_res){
-				cout << "Func  0x" <<std::hex << r_f << endl;
+				identified_functions.insert((uint64_t) r_f);
+				//cout << "Func  0x" <<std::hex << r_f << endl;
 			}
 			//cout << addr << endl;
 		}
 	}
+	return identified_functions;
 }
 
 std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, set<uint64_t> &functions){
@@ -404,7 +423,7 @@ int main(int argc, char** argv){
 	std::map<unsigned long, unsigned long> block_regions;
 	block_regions=dumpCFG(*code_obj_eh, instructions, eh_functions);
 	//get false negative functions
-	set<uint64_t> fn_functions = compareFunc(eh_functions, gt_functions);
+	set<uint64_t> fn_functions = compareFunc(eh_functions, gt_functions, false);
 	
 	std::vector<SymtabAPI::Region *> regs;
 	std::vector<SymtabAPI::Region *> data_regs;
@@ -423,8 +442,8 @@ int main(int argc, char** argv){
 	std::map<unsigned long, unsigned long> gap_regions;
 	uint64_t gap_regions_num = 0;
 	map<Address, Address> ref_addr;
-	set<Address> cons_addr;
-	cons_addr = getOperand(*code_obj_eh, ref_addr);
+	set<Address> codeRef;
+	codeRef = getOperand(*code_obj_eh, ref_addr);
 	std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
 	unsigned long last_end;
 
@@ -472,12 +491,35 @@ int main(int argc, char** argv){
 	//initialize data reference
 	set<Address> dataRef;
 	dataRef = getDataRef(data_regs, file_offset, input_string, x64);
+	//merge code ref and data ref
+	set<Address> all_ref;
+	unionSet(codeRef, dataRef);
+	
+	// search reference in gaps
 	set<Address> GapRef;
 	GapRef = ScanGaps(gap_regions, dataRef);
 	//ScanGapsGT(gap_regions, gt_ref);
-	CheckInst(GapRef, input_string, instructions, gap_regions);	
-
-	//Statical Result
-	std::cout << "The number of gaps is " << std::dec << gap_regions_num << endl;
 	
+
+	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
+	set<uint64_t> identified_functions;
+	identified_functions = CheckInst(GapRef, input_string, instructions, gap_regions);	
+	
+	set<uint64_t> tp_functions;
+	tp_functions = compareFunc(fn_functions, identified_functions, true);
+	
+	// search fucntions not in ground truth.(new false positive)
+	set<uint64_t> new_fp_functions;
+	new_fp_functions = compareFunc(gt_functions, identified_functions, false);
+	
+	
+	//Statical Result
+	std::cout << "The number of gaps: " << std::dec << gap_regions_num << endl;
+	cout << "The number of functions in gaps: " << fn_functions.size() << endl; 
+	cout << "The number of functions from disassemble function in gaps: " << identified_functions.size() << endl;
+	cout << "The number of correct functions: " << tp_functions.size() << endl;
+	cout << "New False Positive number: " << new_fp_functions.size() << endl;
+	//for (auto fuc: new_fp_functions) {
+	//	cout << hex << fuc << endl;
+	//}
 }
