@@ -1,4 +1,5 @@
 input="/tmp/eh_frame_negative.log"
+fnum=0
 while IFS= read -r line
 do
 	SUB=$(echo "$line" | cut -d':' -f 5)
@@ -9,17 +10,32 @@ do
 	res=${res/./}
 	if [ $tmp = "utils" ]; then
 		file=$(echo "$path" | cut -d'@' -f 6)
+		cmp=$(echo "$line" | cut -d'@' -f 5)
 	else
 		file=$(echo "$path" | cut -d'@' -f 5)
+		cmp=$(echo "$line" | cut -d'@' -f 4)
 	fi
+	block="gtBlock_${file}"
+	block="${block}.pb"
 	gt="gtRef_${file}"
 	gt="${gt}.pb"
 	pb=${res/$file/$gt}
+	bPb=${res/$file/$block}
 	res="${res}.strip"
-	#echo $res
-	#echo $pb
+	flag="x64"
+	opt=$(echo "$cmp" | cut -d'_' -f 2)
+	if [ $opt = "m32" ]; then
+		flag="x32"
+	fi
+		# res is striped binary file
+	# pb is ground truth reference file
+	# bPb is ground truth block file
 	if [ $NUM = "0]" ]; then
 		echo "Result for $res"
-		./dyninstBB_extent $res $pb
+		#echo "./dyninstBB_extent $res $pb $bPb $flag"
+		fnum=$fnum+1
+		./dyninstBB_extent $res $pb $bPb $flag
+		#exit 1
 	fi
 done < "$input"
+echo "File Number: $fnum" 

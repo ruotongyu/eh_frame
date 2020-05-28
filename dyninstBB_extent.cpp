@@ -36,11 +36,21 @@ bool isInGaps(map<unsigned long, unsigned long> gap_regions, unsigned ref){
 	return false;
 }
 
+void Target2Addr(map<uint64_t, uint64_t> gt_ref, set<uint64_t> fn_functions){
+	map<uint64_t, uint64_t> result;
+	for(std::map<uint64_t, uint64_t>::iterator ite=gt_ref.begin(); ite!=gt_ref.end();++ite) {
+		if (fn_functions.count(ite->second)) {
+			result[ite->first] = ite->second;
+			cout << "Found Target " << hex << ite->first << " " << ite->second << endl;
+		}
+	}
+}
+
 set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions){
 	set<uint64_t> res;
 	for (auto func:gt_functions){
 		if (!eh_functions.count(func) && func!=0){
-			cout << hex << func << endl;
+			//cout << "0x" << hex << func << endl;
 			res.insert(func);
 		}
 	}
@@ -61,7 +71,6 @@ set<uint64_t> loadInfo(char* input_pb, blocks::module& module, set<uint64_t> &fu
 			for (auto inst : bb.instructions()){
 				if (inst.call_type() == 3){
 					call_inst.insert(inst.va());			
-					//cout<<"call instruction " << inst.va() << endl;
 				}
 			}
 		}
@@ -142,6 +151,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 }
 
 void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions) {
+	
 	for (auto addr: addr_set){
 		auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 		auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
@@ -262,7 +272,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 
 
 
-set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input){
+set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input, char* x64){
 	size_t code_size;
 	struct stat results;
 	if (stat(input, &results) == 0) {
@@ -281,9 +291,17 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 			if (i + addr_start > code_size) {
 				break;
 			}
-			Address* res = (Address*)(buffer + addr_start + i);
+			Address addr;
+			if (x64 == "x32"){
+				unsigned int* res = (unsigned int*)(buffer + addr_start + i);
+				addr = (Address) *res;
+			}else {
+				Address* res = (Address*)(buffer + addr_start + i);
+				addr = *res;
+			}
+
 			//cout << hex << *res << "  "<<endl;
-			DataRef_res.insert(*res);
+			DataRef_res.insert(addr);
 		}
 	}
 	return DataRef_res;
@@ -358,6 +376,7 @@ int main(int argc, char** argv){
 	char* input_string = argv[1];
 	char* input_pb = argv[2];
 	char* input_block = argv[3];
+	char* x64 = argv[4];
 	getEhFrameAddrs(pc_sets, input_string);
 	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
@@ -387,7 +406,6 @@ int main(int argc, char** argv){
 	//get false negative functions
 	set<uint64_t> fn_functions = compareFunc(eh_functions, gt_functions);
 	
-	exit(1);
 	std::vector<SymtabAPI::Region *> regs;
 	std::vector<SymtabAPI::Region *> data_regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
@@ -397,8 +415,13 @@ int main(int argc, char** argv){
 	map<uint64_t, uint64_t> gt_ref;
 	RefInf::RefList refs_list;
 	gt_ref = loadGroundTruth(input_pb, refs_list, data_regs);
+	
+	//get Tareget to Reference address
+	//Target2Addr(gt_ref, fn_functions);
+	//exit(1);
 	//initialize gap regions
 	std::map<unsigned long, unsigned long> gap_regions;
+	uint64_t gap_regions_num = 0;
 	map<Address, Address> ref_addr;
 	set<Address> cons_addr;
 	cons_addr = getOperand(*code_obj_eh, ref_addr);
@@ -413,6 +436,7 @@ int main(int argc, char** argv){
 		//cout << "0x" << std::hex << addr << " " << addr_end << endl;
 		if (start > addr) {
 			gap_regions[addr] = start;
+			++gap_regions_num;
 		}
 		while (it != block_regions.end()){
        			unsigned long block_end = (unsigned long) it->second;
@@ -425,10 +449,12 @@ int main(int argc, char** argv){
 			if (block_start < addr_end){
 				if (block_start > block_end){
 					gap_regions[block_end] = block_start;
+					++gap_regions_num;
 				}
 			}else{
 				if (addr_end > block_end){
 					gap_regions[block_end] = addr_end;
+					++gap_regions_num;
 				}
 				break;
 			}
@@ -440,13 +466,18 @@ int main(int argc, char** argv){
 	}
 	if (it != block_regions.end() && last_end > (unsigned long) it->second){
 		gap_regions[(unsigned long) it->second] = last_end;
+		++gap_regions_num;
 	}
 
 	//initialize data reference
 	set<Address> dataRef;
-	dataRef = getDataRef(data_regs, file_offset, input_string);
+	dataRef = getDataRef(data_regs, file_offset, input_string, x64);
 	set<Address> GapRef;
 	GapRef = ScanGaps(gap_regions, dataRef);
 	//ScanGapsGT(gap_regions, gt_ref);
 	CheckInst(GapRef, input_string, instructions, gap_regions);	
+
+	//Statical Result
+	std::cout << "The number of gaps is " << std::dec << gap_regions_num << endl;
+	
 }
