@@ -19,7 +19,6 @@
 #include "refInf.pb.h"
 #include "blocks.pb.h"
 
-
 using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
@@ -95,6 +94,7 @@ set<uint64_t> loadInfo(char* input_pb, blocks::module& module, set<uint64_t> &fu
 	return call_inst;
 }
 
+
 int is_cs_nop_ins(cs_insn *ins){
 	switch(ins->id){
 		case X86_INS_NOP:
@@ -148,8 +148,25 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
+			
+			//Check control flow graph
+			for (auto succ: block->targets()){
+				unsigned succ_addr = succ->trg()->start();
+				if (succ_addr == 4294967295){
+					continue;
+				}
+				if (!all_instructions.count(succ_addr)){
+					if (!isInGaps(gap_regions, succ_addr)){
+						return false;
+					}
+				}
+			}
+			
 			// get current address
 			for (auto it: instructions) {
+				//if ((unsigned) func->addr() == 5570560){
+				//	cout << hex << cur_addr << endl;
+				//}
 				Dyninst::InstructionAPI::Instruction inst = it.second;
 				if (!inst.isLegalInsn()){
 					//cout << std::hex << it.first << endl;
@@ -167,18 +184,19 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 	return true;
 }
 
-set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions) {
+set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, map<uint64_t, Address> &Add2Ref, set<uint64_t> &dis_addr) {
 	set<uint64_t> identified_functions;
 	for (auto addr: addr_set){
 		auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 		auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
-		code_obj_gap->parse();
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
 		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
+			dis_addr.insert((uint64_t) addr);
 			for (auto r_f : func_res){
+				Add2Ref[(uint64_t) r_f] = addr;
 				identified_functions.insert((uint64_t) r_f);
 				//cout << "Func  0x" <<std::hex << r_f << endl;
 			}
@@ -291,9 +309,15 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 
 
 
-set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input, char* x64){
+set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input, char* x64, map<Address, unsigned long> &RefMap){
 	size_t code_size;
 	struct stat results;
+	string list[6] = {".rodata", ".data", ".fini_array", ".init_array", ".data.rel.ro", ".data.rel.ro.local"};
+	set<string> white_list;
+	for (int i = 0; i < 6; ++i) {
+		white_list.insert(list[i]);
+	}
+
 	if (stat(input, &results) == 0) {
 		code_size = results.st_size;
 	}
@@ -302,8 +326,13 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 	char buffer[code_size];
 	handleFile.read(buffer, code_size);
 	for (auto &reg: regs){
-		unsigned long addr_start = (unsigned long) reg->getMemOffset();
-		addr_start = addr_start - (unsigned long) offset; 
+		if (!white_list.count(reg->getRegionName())){
+			continue;	
+		}
+		
+		unsigned long addr_start = (unsigned long) reg->getFileOffset();
+		unsigned long m_offset = (unsigned long) reg->getMemOffset();
+		//unsigned long addr_start = start - (unsigned long) offset; 
 		unsigned long region_size = (unsigned long) reg->getMemSize();
 		//void * d_buffer = (void *) &buffer[addr_start];
 		for (int i = 0; i < region_size; ++i) {
@@ -318,9 +347,9 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 				Address* res = (Address*)(buffer + addr_start + i);
 				addr = *res;
 			}
-
 			//cout << hex << *res << "  "<<endl;
 			DataRef_res.insert(addr);
+			RefMap[addr] = i + m_offset;
 		}
 	}
 	return DataRef_res;
@@ -429,7 +458,10 @@ int main(int argc, char** argv){
 	std::vector<SymtabAPI::Region *> data_regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
 	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
-	
+	//for (auto re : data_regs){
+	//	cout << re->getRegionName() <<endl;
+	//}
+	//exit(1);
 	// read reference ground truth from pb file
 	map<uint64_t, uint64_t> gt_ref;
 	RefInf::RefList refs_list;
@@ -490,7 +522,9 @@ int main(int argc, char** argv){
 
 	//initialize data reference
 	set<Address> dataRef;
-	dataRef = getDataRef(data_regs, file_offset, input_string, x64);
+	map<Address, unsigned long> DataRefMap;
+	dataRef = getDataRef(data_regs, file_offset, input_string, x64, DataRefMap);
+	
 	//merge code ref and data ref
 	set<Address> all_ref;
 	unionSet(codeRef, dataRef);
@@ -503,14 +537,20 @@ int main(int argc, char** argv){
 
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	set<uint64_t> identified_functions;
-	identified_functions = CheckInst(GapRef, input_string, instructions, gap_regions);	
-	
+	map<uint64_t, Address> Add2Ref;
+	set<uint64_t> dis_addr;
+	identified_functions = CheckInst(GapRef, input_string, instructions, gap_regions, Add2Ref, dis_addr);	
 	set<uint64_t> tp_functions;
 	tp_functions = compareFunc(fn_functions, identified_functions, true);
 	
 	// search fucntions not in ground truth.(new false positive)
 	set<uint64_t> new_fp_functions;
-	new_fp_functions = compareFunc(gt_functions, identified_functions, false);
+	set<uint64_t> gapRef;
+	cout << codeRef.size() << endl;
+	for (auto ref : GapRef){
+		gapRef.insert((uint64_t) ref);
+	}
+	new_fp_functions = compareFunc(gt_functions, dis_addr, false);
 	
 	
 	//Statical Result
@@ -519,7 +559,10 @@ int main(int argc, char** argv){
 	cout << "The number of functions from disassemble function in gaps: " << identified_functions.size() << endl;
 	cout << "The number of correct functions: " << tp_functions.size() << endl;
 	cout << "New False Positive number: " << new_fp_functions.size() << endl;
-	//for (auto fuc: new_fp_functions) {
-	//	cout << hex << fuc << endl;
+	for (auto fuc: new_fp_functions) {
+		cout << hex << fuc << " " << Add2Ref[fuc] << " " << DataRefMap[Add2Ref[fuc]] << endl;
+	}
+	//for (map<uint64_t, Address>::iterator iter = Add2Ref.begin(); iter != Add2Ref.end(); ++iter) {
+	//	cout << iter->first << " " << iter->second << endl;
 	//}
 }
