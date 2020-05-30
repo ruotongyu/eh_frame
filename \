@@ -162,16 +162,15 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 			}
 			// get current address
 			for (auto it: instructions) {
+				//if ((unsigned) func->addr() == 5570560){
+				//	cout << hex << cur_addr << endl;
+				//}
 				dis_inst.insert(cur_addr);
 				Dyninst::InstructionAPI::Instruction inst = it.second;
-				if (!inst.isLegalInsn() || !inst.isValid()){
+				if (!inst.isLegalInsn()){
 					//cout << std::hex << it.first << endl;
 					return false;
 				}
-				//if (cur_addr == 4403200){
-				//	cout << inst.format() << endl;
-				//	cout << "hello here" <<endl;
-				//}
 				if (!all_instructions.count(cur_addr)) {
 					if (!isInGaps(gap_regions, cur_addr)){
 						return false;
@@ -235,22 +234,16 @@ std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &co
 }
 
 
-void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions){
+void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input){
 	std::stringstream ss;
-	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d =  > /tmp/Dyninst_tmp_out.log";
+	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d = | cut -f1 -d . > /tmp/Dyninst_tmp_out.log";
 	system(ss.str().c_str());
 	std::ifstream frame_file("/tmp/Dyninst_tmp_out.log");
 	std::string line;
-	std::string delimiter = "..";
 	if (frame_file.is_open()){
 		while(std::getline(frame_file, line)){
-			string start = line.substr(0, line.find(delimiter));
-			string end = line.substr(line.find(delimiter));
-			end = end.substr(2);
-			uint64_t pc_addr = std::stoul(start, nullptr, 16);
-			uint64_t func_end = std::stoul(end, nullptr, 16);
+			uint64_t pc_addr = std::stoul(line, nullptr, 16);
 			pc_sets.insert(pc_addr);
-			functions[pc_addr] = func_end;
 		}
 	}
 }
@@ -438,12 +431,11 @@ void getSecRegion(unsigned long &sec_start, unsigned long &sec_end, vector<Symta
 
 int main(int argc, char** argv){
 	std::set<uint64_t> pc_sets;
-	map<uint64_t, uint64_t> pc_funcs;
 	char* input_string = argv[1];
 	char* input_pb = argv[2];
 	char* input_block = argv[3];
 	char* x64 = argv[4];
-	getEhFrameAddrs(pc_sets, input_string, pc_funcs);
+	getEhFrameAddrs(pc_sets, input_string);
 	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
@@ -499,6 +491,7 @@ int main(int argc, char** argv){
 	unsigned long last_end;
 
 	for (auto &reg: regs){
+		//std::cout << reg->getRegionName() << std::endl;
 		unsigned long addr = (unsigned long) reg->getMemOffset();
 		unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
 		unsigned long start = (unsigned long) it->first;
@@ -537,7 +530,7 @@ int main(int argc, char** argv){
 		gap_regions[(unsigned long) it->second] = last_end;
 		++gap_regions_num;
 	}
-	
+
 	//initialize data reference
 	set<Address> dataRef;
 	map<Address, unsigned long> DataRefMap;
