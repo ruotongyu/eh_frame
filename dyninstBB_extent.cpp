@@ -168,10 +168,9 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 					//cout << std::hex << it.first << endl;
 					return false;
 				}
-				//if (cur_addr == 4403200){
-				//	cout << inst.format() << endl;
-				//	cout << "hello here" <<endl;
-				//}
+				if (cur_addr >= 4605253 and cur_addr < 4605300){
+					cout << inst.format() << endl;
+				}
 				if (!all_instructions.count(cur_addr)) {
 					if (!isInGaps(gap_regions, cur_addr)){
 						return false;
@@ -434,6 +433,55 @@ void getSecRegion(unsigned long &sec_start, unsigned long &sec_end, vector<Symta
 	}
 }
 
+map<uint64_t, uint64_t> getGaps(map<uint64_t, uint64_t> functions, vector<SymtabAPI::Region *> regs, uint64_t &gap_regions_num){
+	std::map<uint64_t, uint64_t> gap_regions;
+	std::map<uint64_t, uint64_t>::iterator it=functions.begin();
+	unsigned long last_end;
+	for (auto &reg: regs){
+		unsigned long addr = (unsigned long) reg->getMemOffset();
+		unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
+		unsigned long start = (unsigned long) it->first;
+		if (addr_end <= start) {
+			continue;
+		}
+		if (start > addr) {
+			gap_regions[addr] = start;
+			++gap_regions_num;
+		}
+		while (it != functions.end()){
+       			unsigned long block_end = (unsigned long) it->second;
+       			++it;
+			unsigned long block_start = (unsigned long) it->first;
+			if (block_end > addr_end){
+				std::cout << "Error: Check Region" << std::endl;
+				cout << hex << block_end << " " << addr_end << endl;
+				exit(1);
+			}
+			if (block_start < addr_end){
+				if (block_start > block_end){
+					gap_regions[block_end] = block_start;
+					++gap_regions_num;
+				}
+			}else{
+				if (addr_end > block_end){
+					gap_regions[block_end] = addr_end;
+					++gap_regions_num;
+				}
+				break;
+			}
+		}
+		last_end = addr_end;
+		if (it == functions.end()) {
+			break;
+		}
+	}
+	if (it != functions.end() && last_end > (unsigned long) it->second){
+		gap_regions[(unsigned long) it->second] = last_end;
+		++gap_regions_num;
+	}
+	return gap_regions;
+}
+
 
 
 int main(int argc, char** argv){
@@ -490,53 +538,59 @@ int main(int argc, char** argv){
 	//Target2Addr(gt_ref, fn_functions);
 	//exit(1);
 	//initialize gap regions
-	std::map<unsigned long, unsigned long> gap_regions;
-	uint64_t gap_regions_num = 0;
 	map<Address, Address> ref_addr;
 	set<Address> codeRef;
 	codeRef = getOperand(*code_obj_eh, ref_addr);
-	std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
-	unsigned long last_end;
-
-	for (auto &reg: regs){
-		unsigned long addr = (unsigned long) reg->getMemOffset();
-		unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
-		unsigned long start = (unsigned long) it->first;
+	
+	map<uint64_t, uint64_t> gap_regions;
+	uint64_t gap_regions_num = 0;
+	gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
+	//std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
+	//std::map<uint64_t, uint64_t>::iterator it=gap_regions.begin();
+	//while (it != gap_regions.end()) {
+	//	cout << hex << it->first << " " << it->second << endl;
+	//	++it;
+	//}
+	//unsigned long last_end;
+	//for (auto &reg: regs){
+	//	unsigned long addr = (unsigned long) reg->getMemOffset();
+	//	unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
+	//	unsigned long start = (unsigned long) it->first;
 		//cout << "0x" << std::hex << addr << " " << addr_end << endl;
-		if (start > addr) {
-			gap_regions[addr] = start;
-			++gap_regions_num;
-		}
-		while (it != block_regions.end()){
-       			unsigned long block_end = (unsigned long) it->second;
-       			++it;
-			unsigned long block_start = (unsigned long) it->first;
-			if (block_end > addr_end){
-				std::cout << "Error: Check Region" << std::endl;
-				exit(1);
-			}
-			if (block_start < addr_end){
-				if (block_start > block_end){
-					gap_regions[block_end] = block_start;
-					++gap_regions_num;
-				}
-			}else{
-				if (addr_end > block_end){
-					gap_regions[block_end] = addr_end;
-					++gap_regions_num;
-				}
-				break;
-			}
-		}
-		last_end = addr_end;
-		if (it == block_regions.end()) {
-			break;
-		}
-	}
-	if (it != block_regions.end() && last_end > (unsigned long) it->second){
-		gap_regions[(unsigned long) it->second] = last_end;
-		++gap_regions_num;
-	}
+	//	if (start > addr) {
+	//		gap_regions[addr] = start;
+	//		++gap_regions_num;
+	//	}
+	//	while (it != block_regions.end()){
+       	//		unsigned long block_end = (unsigned long) it->second;
+       	//		++it;
+	//		unsigned long block_start = (unsigned long) it->first;
+	//		if (block_end > addr_end){
+	//			std::cout << "Error: Check Region" << std::endl;
+	//			exit(1);
+	//		}
+	//		if (block_start < addr_end){
+	//			if (block_start > block_end){
+	//				gap_regions[block_end] = block_start;
+	//				++gap_regions_num;
+	//			}
+	//		}else{
+	//			if (addr_end > block_end){
+	//				gap_regions[block_end] = addr_end;
+	//				++gap_regions_num;
+	//			}
+	//			break;
+	//		}
+	//	}
+	//	last_end = addr_end;
+	//	if (it == block_regions.end()) {
+	//		break;
+	//	}
+	//}
+	//if (it != block_regions.end() && last_end > (unsigned long) it->second){
+	//	gap_regions[(unsigned long) it->second] = last_end;
+	//	++gap_regions_num;
+	//}
 	
 	//initialize data reference
 	set<Address> dataRef;
@@ -572,6 +626,7 @@ int main(int argc, char** argv){
 	cout << "The number of functions from disassemble function in gaps: " << identified_functions.size() << endl;
 	cout << "The number of correct functions: " << tp_functions.size() << endl;
 	cout << "New False Positive number: " << new_fp_functions.size() << endl;
+	int plt_num = 0;
 	for (auto fuc: new_fp_functions) {
 		if (fuc < plt_start || fuc > plt_end){
 			cout << hex << fuc << " " << Add2Ref[fuc] << " " << DataRefMap[Add2Ref[fuc]] << endl;
@@ -579,8 +634,11 @@ int main(int argc, char** argv){
 			for (auto it : res){
 				cout << "Instructions: " << it << endl;
 			}
+		}else{
+			++plt_num;
 		}
 	}
+	cout << "fp in plt: " << plt_num << endl;
 	//for (map<uint64_t, Address>::iterator iter = Add2Ref.begin(); iter != Add2Ref.end(); ++iter) {
 	//	cout << iter->first << " " << iter->second << endl;
 	//}
