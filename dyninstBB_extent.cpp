@@ -132,7 +132,6 @@ void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offs
 		if (is_cs_nop_ins(ins) != 1){
 			res_ins.insert(pcaddr);
 		}
-	//	cout << is_cs_nop_ins(ins) << endl;
 	}
 }
 
@@ -160,17 +159,19 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 					}
 				}
 			}
-			// get current address
+			// go through all instructions
 			for (auto it: instructions) {
 				dis_inst.insert(cur_addr);
 				Dyninst::InstructionAPI::Instruction inst = it.second;
+				//Check inlegall instruction
 				if (!inst.isLegalInsn() || !inst.isValid()){
 					//cout << std::hex << it.first << endl;
 					return false;
 				}
-				if (cur_addr >= 4605253 and cur_addr < 4605300){
-					cout << inst.format() << endl;
-				}
+				//if (cur_addr >= 4605253 and cur_addr < 4605300){
+				//	cout << inst.format() << endl;
+				//}
+				//Check conflict instructions
 				if (!all_instructions.count(cur_addr)) {
 					if (!isInGaps(gap_regions, cur_addr)){
 						return false;
@@ -545,52 +546,6 @@ int main(int argc, char** argv){
 	map<uint64_t, uint64_t> gap_regions;
 	uint64_t gap_regions_num = 0;
 	gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
-	//std::map<unsigned long, unsigned long>::iterator it=block_regions.begin();
-	//std::map<uint64_t, uint64_t>::iterator it=gap_regions.begin();
-	//while (it != gap_regions.end()) {
-	//	cout << hex << it->first << " " << it->second << endl;
-	//	++it;
-	//}
-	//unsigned long last_end;
-	//for (auto &reg: regs){
-	//	unsigned long addr = (unsigned long) reg->getMemOffset();
-	//	unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
-	//	unsigned long start = (unsigned long) it->first;
-		//cout << "0x" << std::hex << addr << " " << addr_end << endl;
-	//	if (start > addr) {
-	//		gap_regions[addr] = start;
-	//		++gap_regions_num;
-	//	}
-	//	while (it != block_regions.end()){
-       	//		unsigned long block_end = (unsigned long) it->second;
-       	//		++it;
-	//		unsigned long block_start = (unsigned long) it->first;
-	//		if (block_end > addr_end){
-	//			std::cout << "Error: Check Region" << std::endl;
-	//			exit(1);
-	//		}
-	//		if (block_start < addr_end){
-	//			if (block_start > block_end){
-	//				gap_regions[block_end] = block_start;
-	//				++gap_regions_num;
-	//			}
-	//		}else{
-	//			if (addr_end > block_end){
-	//				gap_regions[block_end] = addr_end;
-	//				++gap_regions_num;
-	//			}
-	//			break;
-	//		}
-	//	}
-	//	last_end = addr_end;
-	//	if (it == block_regions.end()) {
-	//		break;
-	//	}
-	//}
-	//if (it != block_regions.end() && last_end > (unsigned long) it->second){
-	//	gap_regions[(unsigned long) it->second] = last_end;
-	//	++gap_regions_num;
-	//}
 	
 	//initialize data reference
 	set<Address> dataRef;
