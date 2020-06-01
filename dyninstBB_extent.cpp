@@ -127,15 +127,21 @@ void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offs
 	ins = cs_malloc(dis);
 	while(cs_disasm_iter(dis, &code, &size, &pcaddr, ins)){
 		if (!ins->address || !ins->size) {
+			cout << hex <<  "Invalid " << ins->address << " " << ins->size << endl;
 			break;
 		}
+		cout << hex <<  ins->address << " " << ins->size << endl;
 		if (is_cs_nop_ins(ins) != 1){
 			res_ins.insert(pcaddr);
 		}
 	}
+	for (auto a : res_ins){
+		cout << "Nop Instruction " << hex << a << endl;
+	}
 }
 
-bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst){
+
+bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
 		if(seen.count((unsigned long) func->addr())){
@@ -168,14 +174,19 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 					//cout << std::hex << it.first << endl;
 					return false;
 				}
-				//if (cur_addr >= 4605253 and cur_addr < 4605300){
-				//	cout << inst.format() << endl;
-				//}
+				if (cur_addr >= 4551532 and cur_addr < 4551552){
+					cout << hex << cur_addr << " " << inst.format() << endl;
+				}
 				//Check conflict instructions
 				if (!all_instructions.count(cur_addr)) {
 					if (!isInGaps(gap_regions, cur_addr)){
 						return false;
 					}
+				}
+				string str="nop";
+				string assembly=inst.format();
+				if (assembly.find(str) != std::string::npos){
+					nops.insert(cur_addr);
 				}
 				cur_addr += inst.size();
 			}
@@ -184,7 +195,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 	return true;
 }
 
-set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, map<uint64_t, Address> &Add2Ref, set<uint64_t> &dis_addr, map<uint64_t, set<unsigned>> &inst_list) {
+set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, map<uint64_t, Address> &Add2Ref, set<uint64_t> &dis_addr, map<uint64_t, set<unsigned>> &inst_list, set<uint64_t> &nops) {
 	set<uint64_t> identified_functions;
 	for (auto addr: addr_set){
 		auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
@@ -193,7 +204,7 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
 		set<unsigned> dis_inst;
-		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions, dis_inst)){
+		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions, dis_inst, nops)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			dis_addr.insert((uint64_t) addr);
 			inst_list[(uint64_t) addr] = dis_inst;
@@ -519,6 +530,10 @@ int main(int argc, char** argv){
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 	
+	//for (auto fuc:pc_funcs){
+	//	cout << hex << fuc.first << " " << fuc.second << endl;
+	//}
+	//exit(1);
 	//get call instructions and functions from ground truth
 	set<uint64_t> call_inst;
 	set<uint64_t> gt_functions;
@@ -527,13 +542,18 @@ int main(int argc, char** argv){
 	CHECK(code_obj_eh) << "Error: Fail to create ParseAPI::CodeObject";
 	code_obj_eh->parse();
 	
-	//is_inst_nop();
 	uint64_t file_offset = symtab_cs->loadAddress();
-	//cout << hex << symtab_cs->loadAddress() << endl;
+	//is_inst_nop(addr_s, addr_e, file_offset, input_string, tmp);
+	
+	
 	for(auto addr : pc_sets){
 		code_obj_eh->parse(addr, true);
 	}
 	expandFunction(*code_obj_eh, pc_funcs);
+	//for (auto fuc:pc_funcs){
+	//	cout << hex << fuc.first << " " << fuc.second << endl;
+	//}
+	//exit(1);
 	//get instructions and functions disassemled from eh_frame
 	set<unsigned> instructions;
 	set<uint64_t> eh_functions;
@@ -588,7 +608,8 @@ int main(int argc, char** argv){
 	map<uint64_t, Address> Add2Ref;
 	set<uint64_t> dis_addr;
 	map<uint64_t, set<unsigned>> inst_list;
-	identified_functions = CheckInst(GapRef, input_string, instructions, gap_regions, Add2Ref, dis_addr, inst_list);	
+	set<uint64_t> nops;
+	identified_functions = CheckInst(GapRef, input_string, instructions, gap_regions, Add2Ref, dis_addr, inst_list, nops);	
 	set<uint64_t> tp_functions;
 	tp_functions = compareFunc(fn_functions, identified_functions, true);
 	
@@ -604,12 +625,15 @@ int main(int argc, char** argv){
 	cout << "New False Positive number: " << new_fp_functions.size() << endl;
 	int plt_num = 0;
 	for (auto fuc: new_fp_functions) {
+		if (nops.count(fuc)){
+			continue;
+		}
 		if (fuc < plt_start || fuc > plt_end){
 			cout << hex << fuc << " " << Add2Ref[fuc] << " " << DataRefMap[Add2Ref[fuc]] << endl;
 			set<unsigned> res = inst_list[fuc];
-			for (auto it : res){
-				cout << "Instructions: " << it << endl;
-			}
+			//for (auto it : res){
+			//	cout << "Instructions: " << it << endl;
+			//}
 		}else{
 			++plt_num;
 		}

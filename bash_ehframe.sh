@@ -1,4 +1,4 @@
-input="/tmp/eh_frame_negative.log"
+input="/data/compare_ehframe/all_fn.log"
 fnum=0
 while IFS= read -r line
 do
