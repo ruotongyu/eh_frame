@@ -208,9 +208,31 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 	return identified_functions;
 }
 
+
+void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t> &pc_funcs) {
+	std::set<Dyninst::Address> seen;
+	for (auto func:codeobj.funcs()){
+		if (seen.count(func->addr())){
+			continue;
+		}
+		seen.insert(func->addr());
+		bool found = false;
+		for (map<uint64_t, uint64_t>::iterator it=pc_funcs.begin(); it != pc_funcs.end(); ++it){
+			if (func->addr() >= it->first && func->addr() <= it->second){
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			for (auto block: func->blocks()){
+				pc_funcs[(uint64_t) block->start()] = (uint64_t) block->end();
+			}
+		}
+	}
+}
+
 std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, set<uint64_t> &functions){
 	std::set<Dyninst::Address> seen;
-	int count = 0;
 	std::map<unsigned long, unsigned long> block_list;
 	for (auto func:codeobj.funcs()){
 		if(seen.count(func->addr())){
@@ -511,8 +533,7 @@ int main(int argc, char** argv){
 	for(auto addr : pc_sets){
 		code_obj_eh->parse(addr, true);
 	}
-	
-	
+	expandFunction(*code_obj_eh, pc_funcs);
 	//get instructions and functions disassemled from eh_frame
 	set<unsigned> instructions;
 	set<uint64_t> eh_functions;
