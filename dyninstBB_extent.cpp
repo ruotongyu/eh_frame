@@ -7,6 +7,7 @@
 #include "Function.h"
 #include "Symtab.h"
 #include "Instruction.h"
+#include "BinaryFunction.h"
 #include "glog/logging.h"
 #include "gflags/gflags.h"
 #include "blocks.pb.h"
@@ -22,7 +23,8 @@
 using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
-
+using namespace InstructionAPI;
+using namespace Dyninst::ParseAPI;
 
 // Check if the address in gap regions
 bool isInGaps(map<unsigned long, unsigned long> gap_regions, unsigned ref){
@@ -141,15 +143,73 @@ void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offs
 }
 
 
+class nopVisitor : public InstructionAPI::Visitor{
+	public:
+		nopVisitor() : foundReg(false), foundImm(false), foundBin(false), isNop(true) {}
+		virtual ~nopVisitor() {}
+
+		bool foundReg;
+		bool foundImm;
+		bool foundBin;
+		bool isNop;
+
+		virtual void visit(BinaryFunction*) {
+			if (foundBin) isNop = false;
+			if (!foundImm) isNop = false;
+			if (!foundReg) isNop = false;
+			foundBin = true;
+		}
+
+		virtual void visit(Immediate *imm) {
+			if (imm != 0) isNop = false;
+			foundImm = true;
+		}
+
+		virtual void visit(RegisterAST *) {
+			foundReg = true;
+		}
+
+		virtual void visit(Dereference *){
+			isNop = false;
+		}
+};
+
+bool isNopInsn(Instruction insn) {
+	if(insn.getOperation().getID() == e_nop){
+		return true;
+	}
+	if(insn.getOperation().getID() == e_lea){
+		set<Expression::Ptr> memReadAddr;
+		insn.getMemoryReadOperands(memReadAddr);
+		set<RegisterAST::Ptr> writtenRegs;
+		insn.getWriteSet(writtenRegs);
+
+		if(memReadAddr.size() == 1 && writtenRegs.size() == 1) {
+			if (**(memReadAddr.begin()) == **(writtenRegs.begin())) {
+				return true;
+			}
+		}
+		nopVisitor visitor;
+
+		insn.getOperand(1).getValue()->apply(&visitor);
+		if (visitor.isNop) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
 		if(seen.count((unsigned long) func->addr())){
 			continue;
 		}
+
 		seen.insert((unsigned long) func->addr());
 		res.insert(func->addr());
 		for (auto block: func->blocks()){
+			//cout << hex << block->start() << " " << block->end() << endl;
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
@@ -183,11 +243,14 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 						return false;
 					}
 				}
-				string str="nop";
-				string assembly=inst.format();
-				if (assembly.find(str) != std::string::npos){
+				if (isNopInsn(inst)) {
 					nops.insert(cur_addr);
 				}
+				//string str="nop";
+				//string assembly=inst.format();
+				//if (assembly.find(str) != std::string::npos){
+				//	nops.insert(cur_addr);
+				//}
 				cur_addr += inst.size();
 			}
 		}
@@ -305,7 +368,9 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 
 				cur_addr = it.first;
 				next_addr = cur_addr + inst.size();
-
+				if (cur_addr % 4 != 0) {
+					continue;
+				}
 				std::vector<InstructionAPI::Operand> operands;
 				inst.getOperands(operands);
 				for (auto operand:operands){
@@ -379,6 +444,9 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 		for (int i = 0; i < region_size; ++i) {
 			if (i + addr_start > code_size) {
 				break;
+			}
+			if ((i + m_offset)%4 != 0) {
+				continue;
 			}
 			Address addr;
 			if (x64 == "x32"){
