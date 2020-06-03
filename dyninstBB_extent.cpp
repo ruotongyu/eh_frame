@@ -97,52 +97,6 @@ set<uint64_t> loadInfo(char* input_pb, blocks::module& module, set<uint64_t> &fu
 }
 
 
-int is_cs_nop_ins(cs_insn *ins){
-	switch(ins->id){
-		case X86_INS_NOP:
-		case X86_INS_FNOP:
-		case X86_INS_INT3:
-			return 1;
-		default:
-			return 0;
-	}
-}
-
-void is_inst_nop(unsigned long addr_start, unsigned long addr_end, uint64_t offset, char* input, set<uint64_t> &res_ins){
-	struct stat results;
-	size_t code_size;
-	if (stat(input, &results) == 0) {
-		code_size = results.st_size;
-	}
-	std::ifstream handleFile (input, std::ios::in | ios::binary);
-	char buffer[code_size];
-	handleFile.read(buffer, code_size);
-
-	csh dis;
-	cs_insn *ins;
-	cs_open(CS_ARCH_X86, CS_MODE_64, &dis);
-	uint64_t pcaddr = (uint64_t) addr_start;
-	uint64_t off = (uint64_t)addr_start - offset;
-	uint8_t const *code = (uint8_t *) &buffer[off];
-	size_t size = size_t(addr_end - addr_start);
-	//std::cout << hex << size << "  " << offset << std::endl;
-	ins = cs_malloc(dis);
-	while(cs_disasm_iter(dis, &code, &size, &pcaddr, ins)){
-		if (!ins->address || !ins->size) {
-			cout << hex <<  "Invalid " << ins->address << " " << ins->size << endl;
-			break;
-		}
-		cout << hex <<  ins->address << " " << ins->size << endl;
-		if (is_cs_nop_ins(ins) != 1){
-			res_ins.insert(pcaddr);
-		}
-	}
-	for (auto a : res_ins){
-		cout << "Nop Instruction " << hex << a << endl;
-	}
-}
-
-
 class nopVisitor : public InstructionAPI::Visitor{
 	public:
 		nopVisitor() : foundReg(false), foundImm(false), foundBin(false), isNop(true) {}
@@ -234,9 +188,9 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 					//cout << std::hex << it.first << endl;
 					return false;
 				}
-				if (cur_addr >= 4551532 and cur_addr < 4551552){
-					cout << hex << cur_addr << " " << inst.format() << endl;
-				}
+				//if (cur_addr >= 4653134 and cur_addr < 4653174){
+				//	cout << hex << cur_addr << " " << inst.format() << endl;
+				//}
 				//Check conflict instructions
 				if (!all_instructions.count(cur_addr)) {
 					if (!isInGaps(gap_regions, cur_addr)){
@@ -246,11 +200,6 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 				if (isNopInsn(inst)) {
 					nops.insert(cur_addr);
 				}
-				//string str="nop";
-				//string assembly=inst.format();
-				//if (assembly.find(str) != std::string::npos){
-				//	nops.insert(cur_addr);
-				//}
 				cur_addr += inst.size();
 			}
 		}
@@ -298,6 +247,7 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 			}
 		}
 		if (!found) {
+			//pc_funcs[(uint64_t) func->addr()] = 0;
 			for (auto block: func->blocks()){
 				pc_funcs[(uint64_t) block->start()] = (uint64_t) block->end();
 			}
@@ -329,6 +279,32 @@ std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &co
 	}
 	return block_list;
 }
+
+void loadFnAddrs(char* input, map<uint64_t, uint64_t> &ref2func){
+	std::ifstream file_name("./script/fn_with_reference.log");
+	std::string line;
+	string name = input;
+	if (file_name.is_open()){
+		string target_file;
+		while(std::getline(file_name, line)) {
+			if (line.find("data") == 1){
+				target_file = line;
+			}
+			if (name.compare(target_file) == 0 && line.find("Target") == 0) {
+				int start_index = line.find("0x") + 2;
+				int end_index = line.find(",") - 1;
+				int length = end_index - start_index;
+				string ref = line.substr(end_index);
+				int ref_start = ref.find("0x") + 2;
+				uint64_t func_addr = std::stoi(line.substr(start_index, length), 0, 16);
+				uint64_t ref_addr = std::stoi(ref.substr(ref_start, length), 0, 16);
+				ref2func[ref_addr] = func_addr;
+				//cout << hex << func_addr << " " << ref_addr << endl;
+			}
+		}
+	}
+}
+
 
 
 void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions){
@@ -526,7 +502,7 @@ map<uint64_t, uint64_t> loadGroundTruth(char* input_pb, RefInf::RefList &reflist
 	return target_addr;
 }
 
-void getSecRegion(unsigned long &sec_start, unsigned long &sec_end, vector<SymtabAPI::Region *> regs){
+void getPltRegion(unsigned long &sec_start, unsigned long &sec_end, vector<SymtabAPI::Region *> regs){
 	for (auto re : regs){
 		if (re->getRegionName() == ".plt") {
 			sec_start = (unsigned long) re->getMemOffset();
@@ -593,6 +569,9 @@ int main(int argc, char** argv){
 	char* input_pb = argv[2];
 	char* input_block = argv[3];
 	char* x64 = argv[4];
+	// load false negative functions with reference
+	map<uint64_t, uint64_t> ref2Addr;
+	loadFnAddrs(input_string, ref2Addr);
 	getEhFrameAddrs(pc_sets, input_string, pc_funcs);
 	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
@@ -619,7 +598,7 @@ int main(int argc, char** argv){
 	}
 	expandFunction(*code_obj_eh, pc_funcs);
 	//for (auto fuc:pc_funcs){
-	//	cout << hex << fuc.first << " " << fuc.second << endl;
+	//	cout << "Target: " << hex << fuc.first << " " << fuc.second << endl;
 	//}
 	//exit(1);
 	//get instructions and functions disassemled from eh_frame
@@ -637,7 +616,7 @@ int main(int argc, char** argv){
 	
 	//get plt section region
 	unsigned long plt_start, plt_end;
-	getSecRegion(plt_start, plt_end, regs);
+	getPltRegion(plt_start, plt_end, regs);
 	
 	// read reference ground truth from pb file
 	map<uint64_t, uint64_t> gt_ref;
@@ -656,6 +635,15 @@ int main(int argc, char** argv){
 	uint64_t gap_regions_num = 0;
 	gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
 	
+	//for (map<uint64_t, uint64_t>::iterator it=ref2Addr.begin(); it != ref2Addr.end(); ++it){
+	//	for (map<uint64_t, uint64_t>::iterator ite=gap_regions.begin(); ite!=ref2Addr.end(); ++ite){
+	//		if (it->first >= ite->first && it->first <= ite->second) {
+	//			break;
+	//		}
+	//	}
+	//	cout << "Not in gaps " << std::hex << it->first << " " << it->second << endl;
+	//}
+	//exit(1);
 	//initialize data reference
 	set<Address> dataRef;
 	map<Address, unsigned long> DataRefMap;
@@ -694,20 +682,21 @@ int main(int argc, char** argv){
 	int plt_num = 0;
 	for (auto fuc: new_fp_functions) {
 		if (nops.count(fuc)){
+			cout << "Nop instruction: " << hex << fuc << endl;
 			continue;
 		}
 		if (fuc < plt_start || fuc > plt_end){
 			cout << hex << fuc << " " << Add2Ref[fuc] << " " << DataRefMap[Add2Ref[fuc]] << endl;
 			set<unsigned> res = inst_list[fuc];
-			//for (auto it : res){
-			//	cout << "Instructions: " << it << endl;
-			//}
+			for (auto it : res){
+				cout << "Instructions: " << it << endl;
+			}
 		}else{
 			++plt_num;
 		}
 	}
-	cout << "fp in plt: " << plt_num << endl;
-	//for (map<uint64_t, Address>::iterator iter = Add2Ref.begin(); iter != Add2Ref.end(); ++iter) {
-	//	cout << iter->first << " " << iter->second << endl;
-	//}
+	cout << "fp in plt: " << dec << plt_num << endl;
+	for (auto nop: nops) {
+		cout << "Nops instruction: " << hex << nop << endl;
+	}
 }
