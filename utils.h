@@ -1,3 +1,5 @@
+#ifndef EH_FRAME_UTILS_H
+#define EH_FRAME_UTILS_H
 using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
@@ -46,3 +48,4 @@ bool isNopInsn(Instruction insn);
 void ScanGapsGT(map<unsigned long, unsigned long> gap_regions, map<uint64_t, uint64_t> dataRef);
 
 map<uint64_t, uint64_t> getGaps(map<uint64_t, uint64_t> functions, vector<SymtabAPI::Region *> regs, uint64_t &gap_regions_num);
+#endif

@@ -1,3 +1,5 @@
+#ifndef EH_FRAME_LOAD_H
+#define EH_FRAME_LOAD_H
 using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
@@ -12,3 +14,4 @@ set<uint64_t> loadGTFunc(char* input_pb, blocks::module& module, set<uint64_t> &
 map<uint64_t, uint64_t> loadGTRef(char* input_pb, RefInf::RefList &reflist, std::vector<SymtabAPI::Region *> regs);
 
 void loadFnAddrs(char* input, map<uint64_t, uint64_t> &ref2func);
+#endif
