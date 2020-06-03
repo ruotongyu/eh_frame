@@ -19,139 +19,14 @@
 #include <Result.h>
 #include "refInf.pb.h"
 #include "blocks.pb.h"
+#include "utils.h"
+#include "loadInfo.h"
 
 using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
-
-// Check if the address in gap regions
-bool isInGaps(map<unsigned long, unsigned long> gap_regions, unsigned ref){
-	for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-		unsigned long c_addr = (unsigned long) ref;
-		if (c_addr > ite->first && c_addr < ite->second) {
-			return true;
-		}
-	}
-	return false;
-}
-
-void Target2Addr(map<uint64_t, uint64_t> gt_ref, set<uint64_t> fn_functions){
-	map<uint64_t, uint64_t> result;
-	for(std::map<uint64_t, uint64_t>::iterator ite=gt_ref.begin(); ite!=gt_ref.end();++ite) {
-		if (fn_functions.count(ite->second)) {
-			result[ite->first] = ite->second;
-			cout << "Found Target " << hex << ite->first << " " << ite->second << endl;
-		}
-	}
-}
-
-// compare the difference between two set, if flag is true return overlap function, else return difference
-set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions, bool flag){
-	set<uint64_t> res;
-	for (auto func:gt_functions){
-		if (flag) {
-			if (eh_functions.count(func) && func!=0){
-				res.insert(func);
-			}
-		} else{
-			
-			if (!eh_functions.count(func) && func!=0){
-				res.insert(func);
-			}
-		}
-	}
-	return res;
-}
-
-set<Address> unionSet(set<Address> set1, set<Address> set2){
-	for (auto item : set1) {
-		if (!set2.count(item)){
-			set2.insert(item);
-		}
-	}
-	return set2;
-}
-
-set<uint64_t> loadInfo(char* input_pb, blocks::module& module, set<uint64_t> &functions) {
-	set<uint64_t> call_inst;
-	std::fstream input(input_pb, std::ios::in | std::ios::binary);
-	if (!input) {
-		cout << "Could not open the file " << input_pb << endl;
-	}
-	if (!module.ParseFromIstream(&input)){
-		cout << "Could not load pb file" << input_pb << endl;
-	}
-	for (auto func : module.fuc()) {
-		functions.insert(func.va());
-		for (auto bb : func.bb()){
-			for (auto inst : bb.instructions()){
-				if (inst.call_type() == 3){
-					call_inst.insert(inst.va());			
-				}
-			}
-		}
-	}
-	return call_inst;
-}
-
-
-class nopVisitor : public InstructionAPI::Visitor{
-	public:
-		nopVisitor() : foundReg(false), foundImm(false), foundBin(false), isNop(true) {}
-		virtual ~nopVisitor() {}
-
-		bool foundReg;
-		bool foundImm;
-		bool foundBin;
-		bool isNop;
-
-		virtual void visit(BinaryFunction*) {
-			if (foundBin) isNop = false;
-			if (!foundImm) isNop = false;
-			if (!foundReg) isNop = false;
-			foundBin = true;
-		}
-
-		virtual void visit(Immediate *imm) {
-			if (imm != 0) isNop = false;
-			foundImm = true;
-		}
-
-		virtual void visit(RegisterAST *) {
-			foundReg = true;
-		}
-
-		virtual void visit(Dereference *){
-			isNop = false;
-		}
-};
-
-bool isNopInsn(Instruction insn) {
-	if(insn.getOperation().getID() == e_nop){
-		return true;
-	}
-	if(insn.getOperation().getID() == e_lea){
-		set<Expression::Ptr> memReadAddr;
-		insn.getMemoryReadOperands(memReadAddr);
-		set<RegisterAST::Ptr> writtenRegs;
-		insn.getWriteSet(writtenRegs);
-
-		if(memReadAddr.size() == 1 && writtenRegs.size() == 1) {
-			if (**(memReadAddr.begin()) == **(writtenRegs.begin())) {
-				return true;
-			}
-		}
-		nopVisitor visitor;
-
-		insn.getOperand(1).getValue()->apply(&visitor);
-		if (visitor.isNop) {
-			return true;
-		}
-	}
-	return false;
-}
 
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
@@ -231,8 +106,7 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 	return identified_functions;
 }
 
-
-void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t> &pc_funcs) {
+void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t> &pc_funcs, set<uint64_t> &pc_sets) {
 	std::set<Dyninst::Address> seen;
 	for (auto func:codeobj.funcs()){
 		if (seen.count(func->addr())){
@@ -247,7 +121,7 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 			}
 		}
 		if (!found) {
-			//pc_funcs[(uint64_t) func->addr()] = 0;
+			pc_sets.insert((uint64_t) func->addr());
 			for (auto block: func->blocks()){
 				pc_funcs[(uint64_t) block->start()] = (uint64_t) block->end();
 			}
@@ -280,52 +154,7 @@ std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &co
 	return block_list;
 }
 
-void loadFnAddrs(char* input, map<uint64_t, uint64_t> &ref2func){
-	std::ifstream file_name("./script/fn_with_reference.log");
-	std::string line;
-	string name = input;
-	if (file_name.is_open()){
-		string target_file;
-		while(std::getline(file_name, line)) {
-			if (line.find("data") == 1){
-				target_file = line;
-			}
-			if (name.compare(target_file) == 0 && line.find("Target") == 0) {
-				int start_index = line.find("0x") + 2;
-				int end_index = line.find(",") - 1;
-				int length = end_index - start_index;
-				string ref = line.substr(end_index);
-				int ref_start = ref.find("0x") + 2;
-				uint64_t func_addr = std::stoi(line.substr(start_index, length), 0, 16);
-				uint64_t ref_addr = std::stoi(ref.substr(ref_start, length), 0, 16);
-				ref2func[ref_addr] = func_addr;
-				//cout << hex << func_addr << " " << ref_addr << endl;
-			}
-		}
-	}
-}
 
-
-
-void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions){
-	std::stringstream ss;
-	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d =  > /tmp/Dyninst_tmp_out.log";
-	system(ss.str().c_str());
-	std::ifstream frame_file("/tmp/Dyninst_tmp_out.log");
-	std::string line;
-	std::string delimiter = "..";
-	if (frame_file.is_open()){
-		while(std::getline(frame_file, line)){
-			string start = line.substr(0, line.find(delimiter));
-			string end = line.substr(line.find(delimiter));
-			end = end.substr(2);
-			uint64_t pc_addr = std::stoul(start, nullptr, 16);
-			uint64_t func_end = std::stoul(end, nullptr, 16);
-			pc_sets.insert(pc_addr);
-			functions[pc_addr] = func_end;
-		}
-	}
-}
 
 set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Address> &ref_addr) {
 	set<Address> constant;
@@ -390,7 +219,6 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 }
 
 
-
 set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input, char* x64, map<Address, unsigned long> &RefMap){
 	size_t code_size;
 	struct stat results;
@@ -440,127 +268,6 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 	return DataRef_res;
 }
 
-set<Address> ScanGaps(map<unsigned long, unsigned long> gap_regions, set<Address> dataRef){
-	set<Address> gap_set;
-	// serach for result in gap regions
-	for (auto ref : dataRef){
-		for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-			unsigned long c_addr = (unsigned long) ref;
-			if (c_addr > ite->first && c_addr < ite->second) {
-				gap_set.insert(c_addr);
-				//cout << "0x" << std::hex << c_addr << endl;
-				break;
-			}
-		}
-	}
-	return gap_set;
-}
-
-
-void ScanGapsGT(map<unsigned long, unsigned long> gap_regions, map<uint64_t, uint64_t> dataRef){
-	set<Address> gap_set;
-	map<uint64_t, uint64_t>::iterator mt;
-	// serach for result in gap regions
-	for (mt = dataRef.begin(); mt != dataRef.end(); ++mt){
-		for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-			unsigned long c_addr = (unsigned long) mt->second;
-			if (c_addr > ite->first && c_addr < ite->second) {
-				//gap_set.insert(a_addr);
-				cout << "0x" << std::hex << mt->first << " " << mt->second << endl;
-				break;
-			}
-		}
-	}
-}
-
-map<uint64_t, uint64_t> loadGroundTruth(char* input_pb, RefInf::RefList &reflist, std::vector<SymtabAPI::Region *> regs) {
-	map<uint64_t, uint64_t> target_addr;
-	std::fstream input(input_pb, std::ios::in | std::ios::binary);
-	if (!input) {
-		cout << "Could not open the file " << input_pb << endl;
-	}
-	if (!reflist.ParseFromIstream(&input)){
-		cout << "Could not load pb file" << input_pb << endl;
-	}
-	uint64_t target_va, ref_va;
-	for (int i = 0; i < reflist.ref_size(); i++){
-		const RefInf::Reference& cur_ref = reflist.ref(i);
-		ref_va = cur_ref.ref_va();
-		target_va = cur_ref.target_va();
-		//target_addr[ref_va] = target_va;
-		//cout << hex << target_va << endl;
-		for (auto &reg: regs) {
-			unsigned long addr_start = (unsigned long) reg->getMemOffset();
-			unsigned long addr_end = addr_start + (unsigned long) reg->getMemSize();
-			if (ref_va >= addr_start && ref_va <= addr_end){
-				target_addr[ref_va] = target_va;
-				//cout << hex << "0x" << ref_va << " 0x" << target_va << endl;
-				break;
-			}
-		}
-	}
-	return target_addr;
-}
-
-void getPltRegion(unsigned long &sec_start, unsigned long &sec_end, vector<SymtabAPI::Region *> regs){
-	for (auto re : regs){
-		if (re->getRegionName() == ".plt") {
-			sec_start = (unsigned long) re->getMemOffset();
-			sec_end = sec_start + re->getMemSize();
-		}
-	}
-}
-
-map<uint64_t, uint64_t> getGaps(map<uint64_t, uint64_t> functions, vector<SymtabAPI::Region *> regs, uint64_t &gap_regions_num){
-	std::map<uint64_t, uint64_t> gap_regions;
-	std::map<uint64_t, uint64_t>::iterator it=functions.begin();
-	unsigned long last_end;
-	for (auto &reg: regs){
-		unsigned long addr = (unsigned long) reg->getMemOffset();
-		unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
-		unsigned long start = (unsigned long) it->first;
-		if (addr_end <= start) {
-			continue;
-		}
-		if (start > addr) {
-			gap_regions[addr] = start;
-			++gap_regions_num;
-		}
-		while (it != functions.end()){
-       			unsigned long block_end = (unsigned long) it->second;
-       			++it;
-			unsigned long block_start = (unsigned long) it->first;
-			if (block_end > addr_end){
-				std::cout << "Error: Check Region" << std::endl;
-				cout << hex << block_end << " " << addr_end << endl;
-				exit(1);
-			}
-			if (block_start < addr_end){
-				if (block_start > block_end){
-					gap_regions[block_end] = block_start;
-					++gap_regions_num;
-				}
-			}else{
-				if (addr_end > block_end){
-					gap_regions[block_end] = addr_end;
-					++gap_regions_num;
-				}
-				break;
-			}
-		}
-		last_end = addr_end;
-		if (it == functions.end()) {
-			break;
-		}
-	}
-	if (it != functions.end() && last_end > (unsigned long) it->second){
-		gap_regions[(unsigned long) it->second] = last_end;
-		++gap_regions_num;
-	}
-	return gap_regions;
-}
-
-
 
 int main(int argc, char** argv){
 	std::set<uint64_t> pc_sets;
@@ -576,16 +283,14 @@ int main(int argc, char** argv){
 	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
-	
-	//for (auto fuc:pc_funcs){
-	//	cout << hex << fuc.first << " " << fuc.second << endl;
-	//}
+	//printMap(pc_funcs);
 	//exit(1);
+	
 	//get call instructions and functions from ground truth
 	set<uint64_t> call_inst;
 	set<uint64_t> gt_functions;
 	blocks::module mModule;
-	call_inst = loadInfo(input_block, mModule, gt_functions);
+	call_inst = loadGTFunc(input_block, mModule, gt_functions);
 	CHECK(code_obj_eh) << "Error: Fail to create ParseAPI::CodeObject";
 	code_obj_eh->parse();
 	
@@ -596,10 +301,9 @@ int main(int argc, char** argv){
 	for(auto addr : pc_sets){
 		code_obj_eh->parse(addr, true);
 	}
-	expandFunction(*code_obj_eh, pc_funcs);
-	//for (auto fuc:pc_funcs){
-	//	cout << "Target: " << hex << fuc.first << " " << fuc.second << endl;
-	//}
+	expandFunction(*code_obj_eh, pc_funcs, pc_sets);
+	
+	// printMap(pc_funcs);
 	//exit(1);
 	//get instructions and functions disassemled from eh_frame
 	set<unsigned> instructions;
@@ -621,7 +325,7 @@ int main(int argc, char** argv){
 	// read reference ground truth from pb file
 	map<uint64_t, uint64_t> gt_ref;
 	RefInf::RefList refs_list;
-	gt_ref = loadGroundTruth(input_pb, refs_list, data_regs);
+	gt_ref = loadGTRef(input_pb, refs_list, data_regs);
 	
 	//get Tareget to Reference address
 	//Target2Addr(gt_ref, fn_functions);
@@ -655,10 +359,9 @@ int main(int argc, char** argv){
 	
 	// search reference in gaps
 	set<Address> GapRef;
-	GapRef = ScanGaps(gap_regions, dataRef);
+	GapRef = ScanAddrInRegion(gap_regions, dataRef);
 	//ScanGapsGT(gap_regions, gt_ref);
 	
-
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	set<uint64_t> identified_functions;
 	map<uint64_t, Address> Add2Ref;
