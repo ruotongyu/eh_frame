@@ -22,7 +22,45 @@ using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
-// Check if the address in gap regions
+
+
+
+//get remaining fn except tail call found by basic block
+map<uint64_t, uint64_t> printUndetectedFN(map<uint64_t, uint64_t> ref2Addr, set<uint64_t> pc_sets, map<uint64_t, uint64_t> pc_funcs) {
+	map<uint64_t, uint64_t> undetected;
+	for (map<uint64_t, uint64_t>::iterator it=ref2Addr.begin(); it != ref2Addr.end(); ++it){
+		if (!pc_sets.count(it->second)){
+			bool found = false;
+			for (auto item: pc_funcs){
+				if (item.first == it->second) {
+					found = true;
+					break;
+				}
+			}	
+			if (!found){
+				//cout << "Undetected: " << hex << it->second << " Ref: " << it->first << endl;
+				// ref to target
+				undetected[it->first] = it->second;
+			}
+		}
+	}
+	return undetected;
+}
+
+// get all cases where searched by basic block. Tail Call
+set<uint64_t> printTailCall(set<uint64_t> fn_functions, set<uint64_t> pc_sets, set<uint64_t> bb_list) {
+	set<uint64_t> tailCall;
+	for (auto func : fn_functions){
+		if (!pc_sets.count(func)){
+			if (bb_list.count(func)){
+				tailCall.insert(func);
+			}
+		}
+	}
+	return tailCall;
+}
+
+
 void printSet(set<uint64_t> p_set){
 	for (auto ite: p_set){
 		cout << hex << ite << endl;
@@ -35,6 +73,7 @@ void printMap(map<uint64_t, uint64_t> p_map) {
 	}
 }
 
+// Check if the address in gap regions
 bool isInGaps(std::map<unsigned long, unsigned long> gap_regions, unsigned ref){
 	for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
 		unsigned long c_addr = (unsigned long) ref;
@@ -82,30 +121,27 @@ set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions
 	return res;
 }
 
-set<Address> unionSet(set<Address> set1, set<Address> set2){
+void unionSet(set<Address> set1, set<Address> &set2){
 	for (auto item : set1) {
 		if (!set2.count(item)){
 			set2.insert(item);
 		}
 	}
-	return set2;
 }
 
 
-set<Address> ScanAddrInRegion(map<unsigned long, unsigned long> gap_regions, set<Address> dataRef){
-	set<Address> gap_set;
+void ScanAddrInGap(map<uint64_t, uint64_t> gap_regions, set<Address> dataRef, set<Address> &RefinGap){
 	// serach for result in gap regions
 	for (auto ref : dataRef){
-		for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-			unsigned long c_addr = (unsigned long) ref;
-			if (c_addr > ite->first && c_addr < ite->second) {
-				gap_set.insert(c_addr);
-				//cout << "0x" << std::hex << c_addr << endl;
+		for(std::map<uint64_t, uint64_t>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
+			uint64_t c_addr = (uint64_t) ref;
+			if (c_addr >= ite->first && c_addr <= ite->second) {
+				RefinGap.insert(c_addr);
+				//cout << "0x" << hex << c_addr << endl;
 				break;
 			}
 		}
 	}
-	return gap_set;
 }
 
 class nopVisitor : public InstructionAPI::Visitor{
@@ -165,18 +201,20 @@ bool isNopInsn(Instruction insn) {
 }
 
 
-void ScanGapsGT(map<unsigned long, unsigned long> gap_regions, map<uint64_t, uint64_t> dataRef){
+void ScanGaps(map<uint64_t, uint64_t> gap_regions, map<uint64_t, uint64_t> scanTarget){
 	set<Address> gap_set;
-	map<uint64_t, uint64_t>::iterator mt;
 	// serach for result in gap regions
-	for (mt = dataRef.begin(); mt != dataRef.end(); ++mt){
-		for(std::map<unsigned long, unsigned long>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
-			unsigned long c_addr = (unsigned long) mt->second;
-			if (c_addr > ite->first && c_addr < ite->second) {
+	for (auto item : scanTarget){
+		bool found = false;
+		for(std::map<uint64_t, uint64_t>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
+			if (item.first >= ite->first && item.first <= ite->second) {
 				//gap_set.insert(a_addr);
-				cout << "0x" << std::hex << mt->first << " " << mt->second << endl;
+				found = true;
 				break;
 			}
+		}
+		if (!found) {
+			cout << "Ref: " << hex << item.first << " Target: " << item.second << endl;
 		}
 	}
 }
@@ -187,9 +225,9 @@ map<uint64_t, uint64_t> getGaps(map<uint64_t, uint64_t> functions, vector<Symtab
 	std::map<uint64_t, uint64_t>::iterator it=functions.begin();
 	unsigned long last_end;
 	for (auto &reg: regs){
-		unsigned long addr = (unsigned long) reg->getMemOffset();
-		unsigned long addr_end = addr + (unsigned long) reg->getMemSize();
-		unsigned long start = (unsigned long) it->first;
+		uint64_t addr = (uint64_t) reg->getMemOffset();
+		uint64_t addr_end = addr + (uint64_t) reg->getMemSize();
+		uint64_t start = (uint64_t) it->first;
 		if (addr_end <= start) {
 			continue;
 		}
@@ -198,9 +236,9 @@ map<uint64_t, uint64_t> getGaps(map<uint64_t, uint64_t> functions, vector<Symtab
 			++gap_regions_num;
 		}
 		while (it != functions.end()){
-       			unsigned long block_end = (unsigned long) it->second;
+       			uint64_t block_end = (uint64_t) it->second;
        			++it;
-			unsigned long block_start = (unsigned long) it->first;
+			uint64_t block_start = (uint64_t) it->first;
 			if (block_end > addr_end){
 				std::cout << "Error: Check Region" << std::endl;
 				cout << hex << block_end << " " << addr_end << endl;
@@ -224,8 +262,8 @@ map<uint64_t, uint64_t> getGaps(map<uint64_t, uint64_t> functions, vector<Symtab
 			break;
 		}
 	}
-	if (it != functions.end() && last_end > (unsigned long) it->second){
-		gap_regions[(unsigned long) it->second] = last_end;
+	if (it != functions.end() && last_end > it->second){
+		gap_regions[it->second] = last_end;
 		++gap_regions_num;
 	}
 	return gap_regions;

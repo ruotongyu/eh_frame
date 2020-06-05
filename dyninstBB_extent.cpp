@@ -28,17 +28,17 @@ using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
+//#define DEBUG
+//#define FN_PRINT
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
 		if(seen.count((unsigned long) func->addr())){
 			continue;
 		}
-
 		seen.insert((unsigned long) func->addr());
 		res.insert(func->addr());
 		for (auto block: func->blocks()){
-			//cout << hex << block->start() << " " << block->end() << endl;
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
@@ -63,7 +63,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 					//cout << std::hex << it.first << endl;
 					return false;
 				}
-				//if (cur_addr >= 4653134 and cur_addr < 4653174){
+				//if (cur_addr >= 5413016 and cur_addr <= 5413050){
 				//	cout << hex << cur_addr << " " << inst.format() << endl;
 				//}
 				//Check conflict instructions
@@ -106,7 +106,7 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 	return identified_functions;
 }
 
-void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t> &pc_funcs, set<uint64_t> &pc_sets) {
+void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t> &pc_funcs, set<uint64_t> &eh_functions) {
 	std::set<Dyninst::Address> seen;
 	for (auto func:codeobj.funcs()){
 		if (seen.count(func->addr())){
@@ -121,7 +121,7 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 			}
 		}
 		if (!found) {
-			pc_sets.insert((uint64_t) func->addr());
+			eh_functions.insert((uint64_t) func->addr());
 			for (auto block: func->blocks()){
 				pc_funcs[(uint64_t) block->start()] = (uint64_t) block->end();
 			}
@@ -129,17 +129,16 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 	}
 }
 
-std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, set<uint64_t> &functions){
+set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions){
 	std::set<Dyninst::Address> seen;
-	std::map<unsigned long, unsigned long> block_list;
+	set<uint64_t> block_list;
 	for (auto func:codeobj.funcs()){
 		if(seen.count(func->addr())){
 			continue;
 		}
 		seen.insert(func->addr());
-		functions.insert((uint64_t) func->addr());
 		for (auto block: func->blocks()){
-			block_list[(unsigned long) block->start()] = (unsigned long) block->end();
+			block_list.insert((uint64_t) block->start());
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
@@ -155,9 +154,9 @@ std::map<unsigned long, unsigned long> dumpCFG(Dyninst::ParseAPI::CodeObject &co
 }
 
 
-
 set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Address> &ref_addr) {
 	set<Address> constant;
+	Address ref_value;
 	// pc pointer
 	unsigned cur_addr = 0x0;
 	unsigned next_addr = 0x0;
@@ -173,27 +172,25 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 
 				cur_addr = it.first;
 				next_addr = cur_addr + inst.size();
-				if (cur_addr % 4 != 0) {
-					continue;
-				}
 				std::vector<InstructionAPI::Operand> operands;
 				inst.getOperands(operands);
 				for (auto operand:operands){
 					auto expr = operand.getValue();
-					if (auto imm = dynamic_cast<InstructionAPI::Immediate *>(expr.get())) {
+					if (auto imm = dynamic_cast<InstructionAPI::Immediate *>(expr.get())) { // immediate operand
 						Address addr = imm->eval().convert<Address>();
 						constant.insert(addr);
 						ref_addr[addr] = cur_addr;
-						//cout << "constant Operand " << addr << endl;
+#ifdef DEBUG
+						cout << "[ref imm]: instruction at " << hex << cur_addr << " ref target is " << addr << endl;
+#endif
 					}
-					else if (auto dref = dynamic_cast<InstructionAPI::Dereference *>(expr.get())){
+					else if (auto dref = dynamic_cast<InstructionAPI::Dereference *>(expr.get())){ // memeory operand
 						std::vector<InstructionAPI::InstructionAST::Ptr> args;
 						dref->getChildren(args);
 
 						if (auto d_expr = dynamic_cast<InstructionAPI::Expression *>(args[0].get())){
 							std::vector<InstructionAPI::Expression::Ptr> exps;
 							d_expr->getChildren(exps);
-							Address ref_value;
 							for (auto dref_expr : exps){
 								if (auto dref_imm = dynamic_cast<InstructionAPI::Immediate *>(dref_expr.get())){
 										ref_value = dref_imm->eval().convert<Address>();
@@ -207,8 +204,23 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 							d_expr->bind(&thePC, InstructionAPI::Result(InstructionAPI::u64, next_addr));
 							ref_value = d_expr->eval().convert<Address>();
 							constant.insert(ref_value);
+							if (ref_value){
+								ref_addr[ref_value] = cur_addr;
+								constant.insert(ref_value);
+#ifdef DEBUG
+								cout << "[ref mem]: instruction at " << hex << cur_addr << " ref target is " << ref_value << endl;
+#endif
+							}
+						}
+					} else if (auto binary_func = dynamic_cast<InstructionAPI::BinaryFunction *>(expr.get())){ // binary operand. such as add,sub const(%rip)
+						binary_func->bind(&thePC, InstructionAPI::Result(InstructionAPI::u64, next_addr));
+						ref_value = binary_func->eval().convert<Address>();
+						if (ref_value){
 							ref_addr[ref_value] = cur_addr;
-							//cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
+							constant.insert(ref_value);
+#ifdef DEBUG
+							cout << "[ref bin]: instruction at " << hex << cur_addr << " ref target is " << ref_value << endl;
+#endif
 						}
 					}
 				}
@@ -270,7 +282,7 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 
 
 int main(int argc, char** argv){
-	std::set<uint64_t> pc_sets;
+	std::set<uint64_t> eh_functions;
 	map<uint64_t, uint64_t> pc_funcs;
 	char* input_string = argv[1];
 	char* input_pb = argv[2];
@@ -279,7 +291,7 @@ int main(int argc, char** argv){
 	// load false negative functions with reference
 	map<uint64_t, uint64_t> ref2Addr;
 	loadFnAddrs(input_string, ref2Addr);
-	getEhFrameAddrs(pc_sets, input_string, pc_funcs);
+	getEhFrameAddrs(eh_functions, input_string, pc_funcs);
 	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
@@ -297,22 +309,21 @@ int main(int argc, char** argv){
 	uint64_t file_offset = symtab_cs->loadAddress();
 	//is_inst_nop(addr_s, addr_e, file_offset, input_string, tmp);
 	
-	
-	for(auto addr : pc_sets){
+	for(auto addr : eh_functions){
 		code_obj_eh->parse(addr, true);
 	}
-	expandFunction(*code_obj_eh, pc_funcs, pc_sets);
 	
-	// printMap(pc_funcs);
+	//pc_sets include all function start after recursive disassembling from ehframe
+	expandFunction(*code_obj_eh, pc_funcs, eh_functions);
+	
+	//printMap(bb_list);
 	//exit(1);
 	//get instructions and functions disassemled from eh_frame
 	set<unsigned> instructions;
-	set<uint64_t> eh_functions;
-	std::map<unsigned long, unsigned long> block_regions;
-	block_regions=dumpCFG(*code_obj_eh, instructions, eh_functions);
+	set<uint64_t> bb_list;
+	bb_list=dumpCFG(*code_obj_eh, instructions);
 	//get false negative functions
 	set<uint64_t> fn_functions = compareFunc(eh_functions, gt_functions, false);
-	
 	std::vector<SymtabAPI::Region *> regs;
 	std::vector<SymtabAPI::Region *> data_regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
@@ -325,28 +336,36 @@ int main(int argc, char** argv){
 	// read reference ground truth from pb file
 	map<uint64_t, uint64_t> gt_ref;
 	RefInf::RefList refs_list;
-	gt_ref = loadGTRef(input_pb, refs_list, data_regs);
+	gt_ref = loadGTRef(input_pb, refs_list);
 	
 	//get Tareget to Reference address
 	//Target2Addr(gt_ref, fn_functions);
-	//exit(1);
 	//initialize gap regions
 	map<Address, Address> ref_addr;
 	set<Address> codeRef;
 	codeRef = getOperand(*code_obj_eh, ref_addr);
-	
 	map<uint64_t, uint64_t> gap_regions;
 	uint64_t gap_regions_num = 0;
 	gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
-	
-	//for (map<uint64_t, uint64_t>::iterator it=ref2Addr.begin(); it != ref2Addr.end(); ++it){
-	//	for (map<uint64_t, uint64_t>::iterator ite=gap_regions.begin(); ite!=ref2Addr.end(); ++ite){
-	//		if (it->first >= ite->first && it->first <= ite->second) {
-	//			break;
-	//		}
-	//	}
-	//	cout << "Not in gaps " << std::hex << it->first << " " << it->second << endl;
-	//}
+	map<uint64_t, uint64_t> undetect;
+	undetect = printUndetectedFN(ref2Addr, eh_functions, pc_funcs);
+	set<uint64_t> AsTailCall;
+	AsTailCall = printTailCall(fn_functions, eh_functions, bb_list);
+#ifdef FN_PRINT
+	for (auto fuc : undetect){
+		bool found = false;
+		for (auto gap: gap_regions){
+			if (fuc.first >= gap.first && fuc.first <= gap.second){
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			cout << "Ref: " << hex << fuc.first << " Target: " << fuc.second << endl;
+		}
+	}
+#endif
+	//ScanGaps(gap_regions, tailCall);
 	//exit(1);
 	//initialize data reference
 	set<Address> dataRef;
@@ -354,13 +373,13 @@ int main(int argc, char** argv){
 	dataRef = getDataRef(data_regs, file_offset, input_string, x64, DataRefMap);
 	
 	//merge code ref and data ref
-	set<Address> all_ref;
 	unionSet(codeRef, dataRef);
-	
-	// search reference in gaps
-	set<Address> GapRef;
-	GapRef = ScanAddrInRegion(gap_regions, dataRef);
+
+	// search data reference in gaps
+	set<Address> RefinGap;
+	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	//ScanGapsGT(gap_regions, gt_ref);
+	
 	
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	set<uint64_t> identified_functions;
@@ -368,38 +387,50 @@ int main(int argc, char** argv){
 	set<uint64_t> dis_addr;
 	map<uint64_t, set<unsigned>> inst_list;
 	set<uint64_t> nops;
-	identified_functions = CheckInst(GapRef, input_string, instructions, gap_regions, Add2Ref, dis_addr, inst_list, nops);	
+	identified_functions = CheckInst(RefinGap, input_string, instructions, gap_regions, Add2Ref, dis_addr, inst_list, nops);	
 	set<uint64_t> tp_functions;
-	tp_functions = compareFunc(fn_functions, identified_functions, true);
+	
+	unsigned int TailCallFN = 0, NoRefFN = 0, FixedFN = 0, MissingFN = 0;
+	for (auto fuc:fn_functions){
+		if (identified_functions.count(fuc)){
+			FixedFN++;
+		} else if(AsTailCall.count(fuc)){
+			TailCallFN++;
+		} else if(!gt_ref[fuc]) {
+			NoRefFN++;
+		}else {
+			MissingFN++;
+			cout << "Missed: " << hex << fuc << " Ref: " << gt_ref[fuc] << endl;
+		}
+	}
+	cout << "FN number: " << dec << fn_functions.size() << endl;
+	cout << "FixedFN: " << dec << FixedFN << endl;
+	cout << "Tail Call: " << dec << TailCallFN << endl;
+	cout << "No Reference: " << dec << NoRefFN << endl;
+	cout << "Missing FN: " << dec << MissingFN << endl;
+	//exit(1);
+	//tp_functions = compareFunc(fn_functions, identified_functions, true);
 	
 	// search fucntions not in ground truth.(new false positive)
-	set<uint64_t> new_fp_functions;
+	//set<uint64_t> new_fp_functions;
 	
-	new_fp_functions = compareFunc(gt_functions, identified_functions, false);
+	//new_fp_functions = compareFunc(gt_functions, identified_functions, false);
 	//Statical Result
-	std::cout << "The number of gaps: " << std::dec << gap_regions_num << endl;
-	cout << "The number of functions in gaps: " << fn_functions.size() << endl; 
-	cout << "The number of functions from disassemble function in gaps: " << identified_functions.size() << endl;
-	cout << "The number of correct functions: " << tp_functions.size() << endl;
-	cout << "New False Positive number: " << new_fp_functions.size() << endl;
-	int plt_num = 0;
-	for (auto fuc: new_fp_functions) {
-		if (nops.count(fuc)){
-			cout << "Nop instruction: " << hex << fuc << endl;
-			continue;
-		}
-		if (fuc < plt_start || fuc > plt_end){
-			cout << hex << fuc << " " << Add2Ref[fuc] << " " << DataRefMap[Add2Ref[fuc]] << endl;
-			set<unsigned> res = inst_list[fuc];
-			for (auto it : res){
-				cout << "Instructions: " << it << endl;
-			}
-		}else{
-			++plt_num;
-		}
-	}
-	cout << "fp in plt: " << dec << plt_num << endl;
-	for (auto nop: nops) {
-		cout << "Nops instruction: " << hex << nop << endl;
-	}
+	//int plt_num = 0;
+	//for (auto fuc: new_fp_functions) {
+	//	if (nops.count(fuc)){
+	//		cout << "Nop instruction: " << hex << fuc << endl;
+	//		continue;
+	//	}
+	//	if (fuc < plt_start || fuc > plt_end){
+	//		cout << hex << fuc << " " << Add2Ref[fuc] << " " << DataRefMap[Add2Ref[fuc]] << endl;
+	//		set<unsigned> res = inst_list[fuc];
+	//		for (auto it : res){
+	//			cout << "Instructions: " << it << endl;
+	//		}
+	//	}else{
+	//		++plt_num;
+	//	}
+	//}
+	//cout << "fp in plt: " << dec << plt_num << endl;
 }

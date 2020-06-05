@@ -7,6 +7,9 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 
+map<uint64_t, uint64_t> printUndetectedFN(map<uint64_t, uint64_t> ref2Addr, set<uint64_t> pc_sets, map<uint64_t, uint64_t> pc_funcs);
+set<uint64_t> printTailCall(set<uint64_t> fn_functions, set<uint64_t> pc_sets, set<uint64_t> bb_list);
+
 void printSet(set<uint64_t> p_set);
 
 void printMap(map<uint64_t, uint64_t> p_map);
@@ -19,9 +22,9 @@ void getPltRegion(unsigned long &sec_start, unsigned long &sec_end, vector<Symta
 
 set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions, bool flag);
 
-set<Address> unionSet(set<Address> set1, set<Address> set2);
+void unionSet(set<Address> set1, set<Address> &set2);
 
-set<Address> ScanAddrInRegion(map<unsigned long, unsigned long> gap_regions, set<Address> dataRef);
+void ScanAddrInGap(map<uint64_t, uint64_t> gap_regions, set<Address> dataRef, set<Address> &RefinGap);
 
 class nopVisitor : public InstructionAPI::Visitor{
 	public:
@@ -45,7 +48,7 @@ class nopVisitor : public InstructionAPI::Visitor{
 bool isNopInsn(Instruction insn);
 
 
-void ScanGapsGT(map<unsigned long, unsigned long> gap_regions, map<uint64_t, uint64_t> dataRef);
+void ScanGaps(map<uint64_t, uint64_t> gap_regions, map<uint64_t, uint64_t> scanTarget);
 
 map<uint64_t, uint64_t> getGaps(map<uint64_t, uint64_t> functions, vector<SymtabAPI::Region *> regs, uint64_t &gap_regions_num);
 #endif

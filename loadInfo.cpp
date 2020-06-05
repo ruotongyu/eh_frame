@@ -22,6 +22,7 @@ using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
+
 void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions){
 	std::stringstream ss;
 	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d =  > /tmp/Dyninst_tmp_out.log";
@@ -64,31 +65,27 @@ set<uint64_t> loadGTFunc(char* input_pb, blocks::module& module, set<uint64_t> &
 	return call_inst;
 }
 
-map<uint64_t, uint64_t> loadGTRef(char* input_pb, RefInf::RefList &reflist, std::vector<SymtabAPI::Region *> regs) {
+
+// load ground truth reference from protocol buffer
+// save as target to reference
+map<uint64_t, uint64_t> loadGTRef(char* input_pb, RefInf::RefList &reflist) {
 	map<uint64_t, uint64_t> target_addr;
 	std::fstream input(input_pb, std::ios::in | std::ios::binary);
 	if (!input) {
 		cout << "Could not open the file " << input_pb << endl;
+		exit(1);
 	}
 	if (!reflist.ParseFromIstream(&input)){
 		cout << "Could not load pb file" << input_pb << endl;
+		exit(1);
 	}
 	uint64_t target_va, ref_va;
 	for (int i = 0; i < reflist.ref_size(); i++){
 		const RefInf::Reference& cur_ref = reflist.ref(i);
 		ref_va = cur_ref.ref_va();
 		target_va = cur_ref.target_va();
-		//target_addr[ref_va] = target_va;
+		target_addr[target_va] = ref_va;
 		//cout << hex << target_va << endl;
-		for (auto &reg: regs) {
-			unsigned long addr_start = (unsigned long) reg->getMemOffset();
-			unsigned long addr_end = addr_start + (unsigned long) reg->getMemSize();
-			if (ref_va >= addr_start && ref_va <= addr_end){
-				target_addr[ref_va] = target_va;
-				//cout << hex << "0x" << ref_va << " 0x" << target_va << endl;
-				break;
-			}
-		}
 	}
 	return target_addr;
 }

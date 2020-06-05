@@ -8,6 +8,11 @@ do
 	tmp=$(echo "$path" | cut -d'@' -f 3) 
 	res=${path//@//}
 	res=${res/./}
+	# skip nginx and continue
+	if [ $tmp != "clients" ]; then
+		continue
+	fi
+
 	if [ $tmp = "utils" ]; then
 		file=$(echo "$path" | cut -d'@' -f 6)
 		cmp=$(echo "$line" | cut -d'@' -f 5)
@@ -32,6 +37,7 @@ do
 	# bPb is ground truth block file
 	if [ $NUM = "0]" ]; then
 		echo "Result for $res"
+		echo $tmp
 		#echo "./dyninstBB_extent $res $pb $bPb $flag"
 		fnum=$((fnum+1))
 		./dyninstBB_extent $res $pb $bPb $flag
