@@ -23,29 +23,43 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 
-
-
-//get remaining fn except tail call found by basic block
-map<uint64_t, uint64_t> printUndetectedFN(map<uint64_t, uint64_t> ref2Addr, set<uint64_t> pc_sets, map<uint64_t, uint64_t> pc_funcs) {
-	map<uint64_t, uint64_t> undetected;
-	for (map<uint64_t, uint64_t>::iterator it=ref2Addr.begin(); it != ref2Addr.end(); ++it){
-		if (!pc_sets.count(it->second)){
-			bool found = false;
-			for (auto item: pc_funcs){
-				if (item.first == it->second) {
-					found = true;
-					break;
-				}
-			}	
-			if (!found){
-				//cout << "Undetected: " << hex << it->second << " Ref: " << it->first << endl;
-				// ref to target
-				undetected[it->first] = it->second;
-			}
+void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint64_t> &undetect, set<uint64_t> &fixed){
+	for (auto fuc: fn_functions){
+		if (identified.count(fuc)){
+			fixed.insert(fuc);
+		} else{
+			undetect.insert(fuc);
 		}
 	}
-	return undetected;
 }
+
+void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref){
+	int NoRef = 0;
+	for (auto fn : fnInGap){
+		if (!gt_ref[fn]){
+			NoRef++;
+		}
+	}
+	int WithRef = fnInGap.size() - NoRef;
+	cout << "FN in gaps with Ref: " << dec << WithRef << ", No Ref: " << NoRef << " " << endl;
+}
+
+void functionInGaps(set<uint64_t> fn_functions, set<uint64_t> &fnInGap, set<uint64_t> &fnNotGap, map<uint64_t, uint64_t> gap_regions) {
+	for (auto func: fn_functions){
+		bool found = false;
+		for (auto gap: gap_regions){
+			if (func >= gap.first && func < gap.second){
+				fnInGap.insert(func);
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			fnNotGap.insert(func);
+		}
+	}
+}
+
 
 // get all cases where searched by basic block. Tail Call
 set<uint64_t> printTailCall(set<uint64_t> fn_functions, set<uint64_t> pc_sets, set<uint64_t> bb_list) {
@@ -135,9 +149,12 @@ void ScanAddrInGap(map<uint64_t, uint64_t> gap_regions, set<Address> dataRef, se
 	for (auto ref : dataRef){
 		for(std::map<uint64_t, uint64_t>::iterator ite=gap_regions.begin(); ite!=gap_regions.end();++ite) {
 			uint64_t c_addr = (uint64_t) ref;
-			if (c_addr >= ite->first && c_addr <= ite->second) {
+			if (c_addr >= ite->first && c_addr < ite->second) {
 				RefinGap.insert(c_addr);
-				//cout << "0x" << hex << c_addr << endl;
+#ifdef DEBUG
+				cout << "ref in gap: " << hex << c_addr << " in gap: " << ite->first << " -> "
+					<< ite->second << endl;
+#endif
 				break;
 			}
 		}

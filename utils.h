@@ -7,6 +7,12 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 
+void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint64_t> &undetect, set<uint64_t> &fixed);
+
+void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref);
+
+void functionInGaps(set<uint64_t> fn_functions, set<uint64_t> &fnInGap, set<uint64_t> &fnNotGap, map<uint64_t, uint64_t> gap_regions);
+
 map<uint64_t, uint64_t> printUndetectedFN(map<uint64_t, uint64_t> ref2Addr, set<uint64_t> pc_sets, map<uint64_t, uint64_t> pc_funcs);
 set<uint64_t> printTailCall(set<uint64_t> fn_functions, set<uint64_t> pc_sets, set<uint64_t> bb_list);
 

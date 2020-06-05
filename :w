@@ -30,8 +30,6 @@ using namespace Dyninst::ParseAPI;
 
 //#define DEBUG
 //#define FN_PRINT
-//#define FNGAP_PRINT
-#define FN_GAP_PRINT	
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
@@ -84,14 +82,11 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 	return true;
 }
 
-set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, map<uint64_t, Address> &Add2Ref, set<uint64_t> &dis_addr, set<uint64_t> &nops) {
+set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, map<uint64_t, Address> &Add2Ref, set<uint64_t> &dis_addr, map<uint64_t, set<unsigned>> &inst_list, set<uint64_t> &nops) {
 	set<uint64_t> identified_functions;
-	ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
-	ParseAPI::CodeObject* code_obj_gap = nullptr;
 	for (auto addr: addr_set){
-		//auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
-		//cout << "Disassemble gap at " << hex << addr << endl;
-		code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
+		auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
+		auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
@@ -99,6 +94,7 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions, dis_inst, nops)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			dis_addr.insert((uint64_t) addr);
+			inst_list[(uint64_t) addr] = dis_inst;
 			for (auto r_f : func_res){
 				Add2Ref[(uint64_t) r_f] = addr;
 				identified_functions.insert((uint64_t) r_f);
@@ -106,10 +102,7 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 			}
 			//cout << addr << endl;
 		}
-		//~symtab_cs();
-		delete code_obj_gap;
 	}
-	delete symtab_cs;
 	return identified_functions;
 }
 
@@ -136,7 +129,7 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 	}
 }
 
-set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map){
+set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions){
 	std::set<Dyninst::Address> seen;
 	set<uint64_t> block_list;
 	for (auto func:codeobj.funcs()){
@@ -146,7 +139,6 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 		seen.insert(func->addr());
 		for (auto block: func->blocks()){
 			block_list.insert((uint64_t) block->start());
-			bb_map[(uint64_t) block->start()] = (uint64_t) block->end();
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
@@ -161,17 +153,7 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 	return block_list;
 }
 
-bool isCFIns(InstructionAPI::Instruction* ins){
-	switch (ins->getCategory()){
-		case InstructionAPI::c_CallInsn:
-		case InstructionAPI::c_BranchInsn:
-		case c_ReturnInsn:
-			return true;
-			break;
-		default:
-			return false;
-	}
-}
+
 set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Address> &ref_addr) {
 	set<Address> constant;
 	Address ref_value;
@@ -231,9 +213,6 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 							}
 						}
 					} else if (auto binary_func = dynamic_cast<InstructionAPI::BinaryFunction *>(expr.get())){ // binary operand. such as add,sub const(%rip)
-						if (isCFIns(&inst))
-							continue;
-
 						binary_func->bind(&thePC, InstructionAPI::Result(InstructionAPI::u64, next_addr));
 						ref_value = binary_func->eval().convert<Address>();
 						if (ref_value){
@@ -342,8 +321,7 @@ int main(int argc, char** argv){
 	//get instructions and functions disassemled from eh_frame
 	set<unsigned> instructions;
 	set<uint64_t> bb_list;
-	map<uint64_t, uint64_t> bb_map;
-	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map);
+	bb_list=dumpCFG(*code_obj_eh, instructions);
 	//get false negative functions
 	set<uint64_t> fn_functions = compareFunc(eh_functions, gt_functions, false);
 	std::vector<SymtabAPI::Region *> regs;
@@ -367,9 +345,26 @@ int main(int argc, char** argv){
 	codeRef = getOperand(*code_obj_eh, ref_addr);
 	map<uint64_t, uint64_t> gap_regions;
 	uint64_t gap_regions_num = 0;
-	//gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
-	gap_regions = getGaps(bb_map, regs, gap_regions_num);
-	//map<uint64_t, uint64_t> undetect;
+	gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
+	map<uint64_t, uint64_t> undetect;
+	undetect = printUndetectedFN(ref2Addr, eh_functions, pc_funcs);
+	set<uint64_t> AsTailCall;
+	AsTailCall = printTailCall(fn_functions, eh_functions, bb_list);
+	exit(1);
+#ifdef FN_PRINT
+	for (auto fuc : undetect){
+		bool found = false;
+		for (auto gap: gap_regions){
+			if (fuc.first >= gap.first && fuc.first <= gap.second){
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			cout << "Ref: " << hex << fuc.first << " Target: " << fuc.second << endl;
+		}
+	}
+#endif
 	//ScanGaps(gap_regions, tailCall);
 	//exit(1);
 	//initialize data reference
@@ -384,31 +379,35 @@ int main(int argc, char** argv){
 	set<Address> RefinGap;
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	//ScanGapsGT(gap_regions, gt_ref);
-	//for (auto gap : gap_regions){
-	//	cout << hex << gap.first << " " << gap.second << endl;
-	//}
-	//exit(1);
+	
+	
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
-	set<uint64_t> identified;
+	set<uint64_t> identified_functions;
 	map<uint64_t, Address> Add2Ref;
 	set<uint64_t> dis_addr;
+	map<uint64_t, set<unsigned>> inst_list;
 	set<uint64_t> nops;
-	identified = CheckInst(RefinGap, input_string, instructions, gap_regions, Add2Ref, dis_addr, nops);	
-	set<uint64_t> fixed;
-	set<uint64_t> undetect;
-	set<uint64_t> FNTailCall;
-	set<uint64_t> fnInGap;
-	set<uint64_t> fnInCode;
+	identified_functions = CheckInst(RefinGap, input_string, instructions, gap_regions, Add2Ref, dis_addr, inst_list, nops);	
+	set<uint64_t> tp_functions;
 	
-	getFunctions(identified, fn_functions, undetect, fixed);
-	
-	functionInGaps(undetect, fnInGap, fnInCode, gap_regions);
-	FNTailCall = printTailCall(fnInCode, eh_functions, bb_list);
-	//cout << dec << fn_functions.size() << " solved: " << fixed.size() << " un: " << undetect.size() << endl;
-	cout << dec << "In Code: " << fnInCode.size() << ", In Gaps: " << fnInGap.size() << endl;
-
-	PrintRefInGaps(fnInGap, gt_ref);
-	//cout << "Missing FN: " << dec << MissingFN << endl;
+	unsigned int TailCallFN = 0, NoRefFN = 0, FixedFN = 0, MissingFN = 0;
+	for (auto fuc:fn_functions){
+		if (identified_functions.count(fuc)){
+			FixedFN++;
+		} else if(AsTailCall.count(fuc)){
+			TailCallFN++;
+		} else if(!gt_ref[fuc]) {
+			NoRefFN++;
+		}else {
+			MissingFN++;
+			cout << "Missed: " << hex << fuc << " Ref: " << gt_ref[fuc] << endl;
+		}
+	}
+	cout << "FN number: " << dec << fn_functions.size() << endl;
+	cout << "FixedFN: " << dec << FixedFN << endl;
+	cout << "Tail Call: " << dec << TailCallFN << endl;
+	cout << "No Reference: " << dec << NoRefFN << endl;
+	cout << "Missing FN: " << dec << MissingFN << endl;
 	//exit(1);
 	//tp_functions = compareFunc(fn_functions, identified_functions, true);
 	

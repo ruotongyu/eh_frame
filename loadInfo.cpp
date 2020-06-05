@@ -21,8 +21,12 @@ using namespace SymtabAPI;
 using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
-
-
+/*
+void CheckLinker(set<uint64_t> &fn_functions, const char* input){
+	std::stringstream ss;
+	ss << "objdump -d " << input << " > /tmp/Dyninst_tmp_dump";
+	system(ss.str().c_str());
+}*/
 void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions){
 	std::stringstream ss;
 	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d =  > /tmp/Dyninst_tmp_out.log";
