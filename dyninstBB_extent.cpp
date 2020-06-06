@@ -401,7 +401,7 @@ int main(int argc, char** argv){
 	// search data reference in gaps
 	set<Address> RefinGap;
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
-	exit(-1);
+	//exit(-1);
 	//ScanGapsGT(gap_regions, gt_ref);
 	//for (auto gap : gap_regions){
 	//	cout << hex << gap.first << " " << gap.second << endl;
