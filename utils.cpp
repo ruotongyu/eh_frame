@@ -24,6 +24,28 @@ using namespace Dyninst::ParseAPI;
 
 //#define DEBUG
 
+void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj) {
+	set<Address> seen;
+	for (auto func:codeobj.funcs()){
+		if(seen.count(func->addr())){
+			continue;
+		}
+		seen.insert(func->addr());
+		for(auto block: func->blocks()){
+			Dyninst::ParseAPI::Block::Insns instructions;
+			block->getInsns(instructions);
+			uint64_t cur_addr = block->start();
+			for (auto it: instructions){
+				Dyninst::InstructionAPI::Instruction inst = it.second;
+				if (!inst.isLegalInsn() || !inst.isValid()) {
+					cout << "Invalid Instruction: " << hex << cur_addr << endl;
+				}
+				cout << "Inst: 0x" << hex << cur_addr << " " << inst.format() << endl; 
+			}
+		}
+	}
+}
+
 void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint64_t> &undetect, set<uint64_t> &fixed){
 	for (auto fuc: fn_functions){
 		if (identified.count(fuc)){

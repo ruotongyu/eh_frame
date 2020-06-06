@@ -32,14 +32,14 @@ using namespace Dyninst::ParseAPI;
 //#define FN_PRINT
 //#define FNGAP_PRINT
 //#define DEBUG_GAPS
-#define FN_GAP_PRINT	
+//#define FN_GAP_PRINT	
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
-		if(seen.count((unsigned long) func->addr())){
+		if(seen.count( func->addr())){
 			continue;
 		}
-		seen.insert((unsigned long) func->addr());
+		seen.insert(func->addr());
 		res.insert(func->addr());
 		for (auto block: func->blocks()){
 			Dyninst::ParseAPI::Block::Insns instructions;
@@ -53,6 +53,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 				}
 				if (!all_instructions.count(succ_addr)){
 					if (!isInGaps(gap_regions, succ_addr)){
+						cout << "Faill on Control flow Check" << endl;
 						return false;
 					}
 				}
@@ -66,7 +67,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 					//cout << std::hex << it.first << endl;
 					return false;
 				}
-				//if (cur_addr >= 5413016 and cur_addr <= 5413050){
+				//if (cur_addr >= 7086240 and cur_addr <= 7086340){
 				//	cout << hex << cur_addr << " " << inst.format() << endl;
 				//}
 				//Check conflict instructions
@@ -99,7 +100,10 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
 		set<unsigned> dis_inst;
-		/*
+		if (addr == 7086240) {
+			DebugDisassemble(*code_obj_gap);
+		}
+
 		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions, dis_inst, nops)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			dis_addr.insert((uint64_t) addr);
@@ -110,7 +114,7 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 			}
 			//cout << addr << endl;
 		}
-		*/
+		
 		delete code_obj_gap;
 		delete symtab_cs;
 	}
@@ -413,6 +417,7 @@ int main(int argc, char** argv){
 	set<uint64_t> dis_addr;
 	set<uint64_t> nops;
 	identified = CheckInst(RefinGap, input_string, instructions, gap_regions, Add2Ref, dis_addr, nops);	
+	cout << "Fixed: " << identified.size() << endl;
 	set<uint64_t> fixed;
 	set<uint64_t> undetect;
 	set<uint64_t> FNTailCall;
@@ -420,13 +425,15 @@ int main(int argc, char** argv){
 	set<uint64_t> fnInCode;
 	
 	getFunctions(identified, fn_functions, undetect, fixed);
-	
+	for (auto fuc : identified){
+		cout << "Identified: " << hex << fuc << endl;
+	}
 	functionInGaps(undetect, fnInGap, fnInCode, gap_regions);
 	FNTailCall = printTailCall(fnInCode, eh_functions, bb_list);
 	//cout << dec << fn_functions.size() << " solved: " << fixed.size() << " un: " << undetect.size() << endl;
 	cout << dec << "In Code: " << fnInCode.size() << ", In Gaps: " << fnInGap.size() << endl;
-
-	PrintRefInGaps(fnInGap, gt_ref);
+	map<uint64_t, uint64_t> withRef;
+	PrintRefInGaps(fnInGap, gt_ref, withRef);
 	//cout << "Missing FN: " << dec << MissingFN << endl;
 	//exit(1);
 	//tp_functions = compareFunc(fn_functions, identified_functions, true);

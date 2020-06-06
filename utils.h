@@ -7,6 +7,8 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 
+void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj);
+
 void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint64_t> &undetect, set<uint64_t> &fixed);
 
 void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref, map<uint64_t, uint64_t> &withRef);
