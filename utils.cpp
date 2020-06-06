@@ -22,6 +22,7 @@ using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
+//#define DEBUG
 
 void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint64_t> &undetect, set<uint64_t> &fixed){
 	for (auto fuc: fn_functions){

@@ -31,6 +31,7 @@ using namespace Dyninst::ParseAPI;
 //#define DEBUG
 //#define FN_PRINT
 //#define FNGAP_PRINT
+//#define DEBUG_GAPS
 #define FN_GAP_PRINT	
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
@@ -86,16 +87,19 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 
 set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, map<uint64_t, Address> &Add2Ref, set<uint64_t> &dis_addr, set<uint64_t> &nops) {
 	set<uint64_t> identified_functions;
-	ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
+	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;
+	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
 	for (auto addr: addr_set){
 		//auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
-		//cout << "Disassemble gap at " << hex << addr << endl;
+		cout << "Disassemble gap at " << hex << addr << endl;
+		symtab_cs = new SymtabCodeSource(input_string);
 		code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
 		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
 		set<unsigned> dis_inst;
+		/*
 		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions, dis_inst, nops)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			dis_addr.insert((uint64_t) addr);
@@ -106,10 +110,10 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 			}
 			//cout << addr << endl;
 		}
-		//~symtab_cs();
+		*/
 		delete code_obj_gap;
+		delete symtab_cs;
 	}
-	delete symtab_cs;
 	return identified_functions;
 }
 
@@ -208,15 +212,6 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 
 						if (auto d_expr = dynamic_cast<InstructionAPI::Expression *>(args[0].get())){
 							std::vector<InstructionAPI::Expression::Ptr> exps;
-							d_expr->getChildren(exps);
-							for (auto dref_expr : exps){
-								if (auto dref_imm = dynamic_cast<InstructionAPI::Immediate *>(dref_expr.get())){
-										ref_value = dref_imm->eval().convert<Address>();
-										constant.insert(ref_value);
-										ref_addr[ref_value] = cur_addr;
-										//cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
-										}
-							}
 
 							// bind the pc value.
 							d_expr->bind(&thePC, InstructionAPI::Result(InstructionAPI::u64, next_addr));
@@ -228,7 +223,19 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 #ifdef DEBUG
 								cout << "[ref mem]: instruction at " << hex << cur_addr << " ref target is " << ref_value << endl;
 #endif
+								continue; // do not iterate over exprs
 							}
+
+							d_expr->getChildren(exps);
+							for (auto dref_expr : exps){
+								if (auto dref_imm = dynamic_cast<InstructionAPI::Immediate *>(dref_expr.get())){
+										ref_value = dref_imm->eval().convert<Address>();
+										constant.insert(ref_value);
+										ref_addr[ref_value] = cur_addr;
+										//cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
+										}
+							}
+
 						}
 					} else if (auto binary_func = dynamic_cast<InstructionAPI::BinaryFunction *>(expr.get())){ // binary operand. such as add,sub const(%rip)
 						if (isCFIns(&inst))
@@ -369,6 +376,17 @@ int main(int argc, char** argv){
 	uint64_t gap_regions_num = 0;
 	//gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
 	gap_regions = getGaps(bb_map, regs, gap_regions_num);
+#ifdef DEBUG_GAPS
+	unsigned gap_size = 0;
+	for (auto g_it = gap_regions.begin(); g_it != gap_regions.end(); g_it++){
+		gap_size = g_it->second - g_it->first;
+		if (gap_size < 0x10)
+			continue;
+		cout << "gap: " << hex << g_it->first << " -> " << g_it->second 
+			<< " . Size " << gap_size << endl;
+	}
+	exit(-1);
+#endif
 	//map<uint64_t, uint64_t> undetect;
 	//ScanGaps(gap_regions, tailCall);
 	//exit(1);
@@ -383,6 +401,7 @@ int main(int argc, char** argv){
 	// search data reference in gaps
 	set<Address> RefinGap;
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
+	exit(-1);
 	//ScanGapsGT(gap_regions, gt_ref);
 	//for (auto gap : gap_regions){
 	//	cout << hex << gap.first << " " << gap.second << endl;
