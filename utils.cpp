@@ -41,6 +41,7 @@ void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj) {
 					cout << "Invalid Instruction: " << hex << cur_addr << endl;
 				}
 				cout << "Inst: 0x" << hex << cur_addr << " " << inst.format() << endl; 
+				cur_addr += inst.size();
 			}
 		}
 	}
