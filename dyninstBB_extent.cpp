@@ -28,7 +28,7 @@ using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
-//#define DEBUG
+//#define REF_DEBUG
 //#define FN_PRINT
 //#define FNGAP_PRINT
 #define FN_GAP_PRINT	
@@ -129,9 +129,6 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 		}
 		if (!found) {
 			eh_functions.insert((uint64_t) func->addr());
-			for (auto block: func->blocks()){
-				pc_funcs[(uint64_t) block->start()] = (uint64_t) block->end();
-			}
 		}
 	}
 }
@@ -198,7 +195,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 						Address addr = imm->eval().convert<Address>();
 						constant.insert(addr);
 						ref_addr[addr] = cur_addr;
-#ifdef DEBUG
+#ifdef REF_DEBUG
 						cout << "[ref imm]: instruction at " << hex << cur_addr << " ref target is " << addr << endl;
 #endif
 					}
@@ -225,7 +222,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 							if (ref_value){
 								ref_addr[ref_value] = cur_addr;
 								constant.insert(ref_value);
-#ifdef DEBUG
+#ifdef REF_DEBUG
 								cout << "[ref mem]: instruction at " << hex << cur_addr << " ref target is " << ref_value << endl;
 #endif
 							}
@@ -239,7 +236,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 						if (ref_value){
 							ref_addr[ref_value] = cur_addr;
 							constant.insert(ref_value);
-#ifdef DEBUG
+#ifdef REF_DEBUG
 							cout << "[ref bin]: instruction at " << hex << cur_addr << " ref target is " << ref_value << endl;
 #endif
 						}
@@ -337,8 +334,6 @@ int main(int argc, char** argv){
 	//pc_sets include all function start after recursive disassembling from ehframe
 	expandFunction(*code_obj_eh, pc_funcs, eh_functions);
 	
-	//printMap(bb_list);
-	//exit(1);
 	//get instructions and functions disassemled from eh_frame
 	set<unsigned> instructions;
 	set<uint64_t> bb_list;
@@ -351,6 +346,8 @@ int main(int argc, char** argv){
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
 	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
 	
+	//printMap(bb_map);
+	//exit(1);
 	//get plt section region
 	unsigned long plt_start, plt_end;
 	getPltRegion(plt_start, plt_end, regs);
@@ -365,13 +362,13 @@ int main(int argc, char** argv){
 	map<Address, Address> ref_addr;
 	set<Address> codeRef;
 	codeRef = getOperand(*code_obj_eh, ref_addr);
+	exit(1);
 	map<uint64_t, uint64_t> gap_regions;
 	uint64_t gap_regions_num = 0;
 	//gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
 	gap_regions = getGaps(bb_map, regs, gap_regions_num);
-	//map<uint64_t, uint64_t> undetect;
 	//ScanGaps(gap_regions, tailCall);
-	//exit(1);
+	
 	//initialize data reference
 	set<Address> dataRef;
 	map<Address, unsigned long> DataRefMap;
@@ -406,8 +403,8 @@ int main(int argc, char** argv){
 	FNTailCall = printTailCall(fnInCode, eh_functions, bb_list);
 	//cout << dec << fn_functions.size() << " solved: " << fixed.size() << " un: " << undetect.size() << endl;
 	cout << dec << "In Code: " << fnInCode.size() << ", In Gaps: " << fnInGap.size() << endl;
-
-	PrintRefInGaps(fnInGap, gt_ref);
+	map<uint64_t, uint64_t> withRef;
+	PrintRefInGaps(fnInGap, gt_ref, withRef);
 	//cout << "Missing FN: " << dec << MissingFN << endl;
 	//exit(1);
 	//tp_functions = compareFunc(fn_functions, identified_functions, true);

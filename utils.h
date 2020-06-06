@@ -9,7 +9,7 @@ using namespace Dyninst::ParseAPI;
 
 void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint64_t> &undetect, set<uint64_t> &fixed);
 
-void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref);
+void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref, map<uint64_t, uint64_t> &withRef);
 
 void functionInGaps(set<uint64_t> fn_functions, set<uint64_t> &fnInGap, set<uint64_t> &fnNotGap, map<uint64_t, uint64_t> gap_regions);
 

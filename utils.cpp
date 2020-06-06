@@ -33,15 +33,20 @@ void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint
 	}
 }
 
-void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref){
+void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref, map<uint64_t, uint64_t> &withRef){
 	int NoRef = 0;
 	for (auto fn : fnInGap){
 		if (!gt_ref[fn]){
 			NoRef++;
+		}else{
+			withRef[fn] = gt_ref[fn];
 		}
 	}
 	int WithRef = fnInGap.size() - NoRef;
 	cout << "FN in gaps with Ref: " << dec << WithRef << ", No Ref: " << NoRef << " " << endl;
+	for (auto ref: withRef){
+		cout << "Address: " << hex << ref.first << " Ref:" << ref.second << endl;
+	}
 }
 
 void functionInGaps(set<uint64_t> fn_functions, set<uint64_t> &fnInGap, set<uint64_t> &fnNotGap, map<uint64_t, uint64_t> gap_regions) {
