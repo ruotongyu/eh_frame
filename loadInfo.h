@@ -7,6 +7,7 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 
+void CheckLinker(set<uint64_t> &fn_functions, const char* input);
 void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions);
 
 set<uint64_t> loadGTFunc(char* input_pb, blocks::module& module, set<uint64_t> &functions);

@@ -24,6 +24,27 @@ using namespace Dyninst::ParseAPI;
 
 //#define DEBUG
 
+void identifiedWrong(set<uint64_t> identified, set<uint64_t> gt_functions, uint64_t plt_start, uint64_t plt_end, set<uint64_t> nops) {
+	set<uint64_t> result;
+	//cout << "plt Section >> " << hex << plt_start << " " << plt_end << endl;
+	for (auto func: identified){
+		if (!gt_functions.count(func) && !nops.count(func)){
+			if (func < plt_start || func > plt_end){
+				//cout << "New False Positive: " << hex << func << endl;
+				result.insert(func);
+			}
+		}
+	}
+
+	cout << "New False Positive: " << hex << result.size() << endl;
+}
+
+void PrintFuncResult(int raw_eh_num, int reu_eh_num, int gt_num) {
+	cout << "Number of Ground Truth Functions: " << dec << gt_num << endl;
+	cout << "Number of Missing Functions from EhFrame: " << dec << raw_eh_num << endl;
+	cout << "Number of Missing Functions from Recursive Disassemble EHFrame: " << dec << reu_eh_num << endl;
+}
+
 void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj) {
 	set<Address> seen;
 	for (auto func:codeobj.funcs()){
@@ -67,10 +88,11 @@ void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref, map<u
 		}
 	}
 	int WithRef = fnInGap.size() - NoRef;
-	cout << "FN in gaps with Ref: " << dec << WithRef << ", No Ref: " << NoRef << " " << endl;
-	for (auto ref: withRef){
-		cout << "Address: " << hex << ref.first << " Ref:" << ref.second << endl;
-	}
+	cout << "FN in gaps with Ref: " << dec << WithRef << endl;
+        cout <<	"FN in gaps without Ref: " << dec << NoRef << endl;
+	//for (auto ref: withRef){
+	//	cout << "Address: " << hex << ref.first << " Ref:" << ref.second << endl;
+	//}
 }
 
 void functionInGaps(set<uint64_t> fn_functions, set<uint64_t> &fnInGap, set<uint64_t> &fnNotGap, map<uint64_t, uint64_t> gap_regions) {
@@ -127,7 +149,7 @@ bool isInGaps(std::map<unsigned long, unsigned long> gap_regions, unsigned ref){
 	return false;
 }
 
-void getPltRegion(unsigned long &sec_start, unsigned long &sec_end, vector<SymtabAPI::Region *> regs){
+void getPltRegion(uint64_t &sec_start, uint64_t &sec_end, vector<SymtabAPI::Region *> regs){
 	for (auto re : regs){
 		if (re->getRegionName() == ".plt") {
 			sec_start = (unsigned long) re->getMemOffset();
@@ -155,7 +177,6 @@ set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions
 				res.insert(func);
 			}
 		} else{
-			
 			if (!eh_functions.count(func) && func!=0){
 				res.insert(func);
 			}

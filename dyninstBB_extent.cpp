@@ -21,6 +21,7 @@
 #include "blocks.pb.h"
 #include "utils.h"
 #include "loadInfo.h"
+#include "elf_parser.hpp"
 
 using namespace Dyninst;
 using namespace SymtabAPI;
@@ -32,7 +33,9 @@ using namespace Dyninst::ParseAPI;
 //#define FN_PRINT
 //#define FNGAP_PRINT
 //#define DEBUG_GAPS
+//#define DEBUG_BASICBLOCK
 //#define FN_GAP_PRINT	
+//#define DEBUG_EHFUNC
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
@@ -53,7 +56,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 				}
 				if (!all_instructions.count(succ_addr)){
 					if (!isInGaps(gap_regions, succ_addr)){
-						cout << "Faill on Control flow Check" << endl;
+						//cout << "Faill on Control flow Check" << endl;
 						return false;
 					}
 				}
@@ -64,7 +67,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<Address> &res, set<un
 				Dyninst::InstructionAPI::Instruction inst = it.second;
 				//Check inlegall instruction
 				if (!inst.isLegalInsn() || !inst.isValid()){
-					//cout << std::hex << it.first << endl;
+					//cout << "Invalid Instruction: " << cur_addr << endl;
 					return false;
 				}
 				//if (cur_addr >= 7086240 and cur_addr <= 7086340){
@@ -93,16 +96,16 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
 	for (auto addr: addr_set){
 		//auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
-		cout << "Disassemble gap at " << hex << addr << endl;
+		//cout << "Disassemble gap at " << hex << addr << endl;
 		symtab_cs = new SymtabCodeSource(input_string);
 		code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
 		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
 		code_obj_gap->parse(addr, true);
 		set<Address> func_res;
 		set<unsigned> dis_inst;
-		if (addr == 7086240) {
-			DebugDisassemble(*code_obj_gap);
-		}
+		//if (addr == 5448336) {
+		//	DebugDisassemble(*code_obj_gap);
+		//}
 
 		if (Inst_help(*code_obj_gap, func_res, instructions, gap_regions, dis_inst, nops)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
@@ -112,7 +115,6 @@ set<uint64_t> CheckInst(set<Address> addr_set, char* input_string, set<unsigned>
 				identified_functions.insert((uint64_t) r_f);
 				//cout << "Func  0x" <<std::hex << r_f << endl;
 			}
-			//cout << addr << endl;
 		}
 		
 		delete code_obj_gap;
@@ -283,7 +285,6 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 		if (!white_list.count(reg->getRegionName())){
 			continue;	
 		}
-		
 		unsigned long addr_start = (unsigned long) reg->getFileOffset();
 		unsigned long m_offset = (unsigned long) reg->getMemOffset();
 		//unsigned long addr_start = start - (unsigned long) offset; 
@@ -320,50 +321,65 @@ int main(int argc, char** argv){
 	char* input_pb = argv[2];
 	char* input_block = argv[3];
 	char* x64 = argv[4];
+
+	// The number of functions extract from eh_frame
+	int RAW_EH_NUM = 0;
+	// The number of functions from recursive disassemle from eh_frame
+	int REU_EH_NUM = 0;
+	// The number of ground truth functions
+	int GT_NUM = 0;
 	// load false negative functions with reference
 	map<uint64_t, uint64_t> ref2Addr;
 	loadFnAddrs(input_string, ref2Addr);
 	getEhFrameAddrs(eh_functions, input_string, pc_funcs);
-	
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
-	//printMap(pc_funcs);
-	//exit(1);
 	
 	//get call instructions and functions from ground truth
 	set<uint64_t> call_inst;
 	set<uint64_t> gt_functions;
 	blocks::module mModule;
 	call_inst = loadGTFunc(input_block, mModule, gt_functions);
+	set<uint64_t> raw_fn_functions = compareFunc(eh_functions, gt_functions, false);
+	RAW_EH_NUM = raw_fn_functions.size();
+	GT_NUM = gt_functions.size();
 	CHECK(code_obj_eh) << "Error: Fail to create ParseAPI::CodeObject";
 	code_obj_eh->parse();
-	
 	uint64_t file_offset = symtab_cs->loadAddress();
-	//is_inst_nop(addr_s, addr_e, file_offset, input_string, tmp);
-	
 	for(auto addr : eh_functions){
 		code_obj_eh->parse(addr, true);
 	}
 	
 	//pc_sets include all function start after recursive disassembling from ehframe
 	expandFunction(*code_obj_eh, pc_funcs, eh_functions);
-	
-	//printMap(bb_list);
-	//exit(1);
+#ifdef DEBUG_EHFUNC	
+	printMap(pc_funcs);
+	exit(1);
+#endif
 	//get instructions and functions disassemled from eh_frame
 	set<unsigned> instructions;
 	set<uint64_t> bb_list;
 	map<uint64_t, uint64_t> bb_map;
 	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map);
-	//get false negative functions
+#ifdef DEBUG_BASICBLOCK	
+	printMap(bb_map);
+	exit(1);
+#endif
 	set<uint64_t> fn_functions = compareFunc(eh_functions, gt_functions, false);
+	REU_EH_NUM = fn_functions.size();
+	PrintFuncResult(RAW_EH_NUM, REU_EH_NUM, GT_NUM);
+	for (auto func: fn_functions){
+		cout << hex << func <<endl;
+	}
+	exit(1);
+	//CheckLinker()
 	std::vector<SymtabAPI::Region *> regs;
 	std::vector<SymtabAPI::Region *> data_regs;
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
 	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
 	
 	//get plt section region
-	unsigned long plt_start, plt_end;
+	uint64_t plt_start, plt_end;
 	getPltRegion(plt_start, plt_end, regs);
 	
 	// read reference ground truth from pb file
@@ -378,7 +394,6 @@ int main(int argc, char** argv){
 	codeRef = getOperand(*code_obj_eh, ref_addr);
 	map<uint64_t, uint64_t> gap_regions;
 	uint64_t gap_regions_num = 0;
-	//gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
 	gap_regions = getGaps(bb_map, regs, gap_regions_num);
 #ifdef DEBUG_GAPS
 	unsigned gap_size = 0;
@@ -391,7 +406,6 @@ int main(int argc, char** argv){
 	}
 	exit(-1);
 #endif
-	//map<uint64_t, uint64_t> undetect;
 	//ScanGaps(gap_regions, tailCall);
 	//exit(1);
 	//initialize data reference
@@ -405,19 +419,12 @@ int main(int argc, char** argv){
 	// search data reference in gaps
 	set<Address> RefinGap;
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
-	//exit(-1);
-	//ScanGapsGT(gap_regions, gt_ref);
-	//for (auto gap : gap_regions){
-	//	cout << hex << gap.first << " " << gap.second << endl;
-	//}
-	//exit(1);
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	set<uint64_t> identified;
 	map<uint64_t, Address> Add2Ref;
 	set<uint64_t> dis_addr;
 	set<uint64_t> nops;
 	identified = CheckInst(RefinGap, input_string, instructions, gap_regions, Add2Ref, dis_addr, nops);	
-	cout << "Fixed: " << identified.size() << endl;
 	set<uint64_t> fixed;
 	set<uint64_t> undetect;
 	set<uint64_t> FNTailCall;
@@ -425,39 +432,15 @@ int main(int argc, char** argv){
 	set<uint64_t> fnInCode;
 	
 	getFunctions(identified, fn_functions, undetect, fixed);
-	for (auto fuc : identified){
-		cout << "Identified: " << hex << fuc << endl;
-	}
+	
 	functionInGaps(undetect, fnInGap, fnInCode, gap_regions);
 	FNTailCall = printTailCall(fnInCode, eh_functions, bb_list);
+	cout << "Function Solved: " << dec << fixed.size() << endl;
 	//cout << dec << fn_functions.size() << " solved: " << fixed.size() << " un: " << undetect.size() << endl;
 	cout << dec << "In Code: " << fnInCode.size() << ", In Gaps: " << fnInGap.size() << endl;
 	map<uint64_t, uint64_t> withRef;
 	PrintRefInGaps(fnInGap, gt_ref, withRef);
-	//cout << "Missing FN: " << dec << MissingFN << endl;
-	//exit(1);
-	//tp_functions = compareFunc(fn_functions, identified_functions, true);
-	
-	// search fucntions not in ground truth.(new false positive)
-	//set<uint64_t> new_fp_functions;
-	
-	//new_fp_functions = compareFunc(gt_functions, identified_functions, false);
-	//Statical Result
-	//int plt_num = 0;
-	//for (auto fuc: new_fp_functions) {
-	//	if (nops.count(fuc)){
-	//		cout << "Nop instruction: " << hex << fuc << endl;
-	//		continue;
-	//	}
-	//	if (fuc < plt_start || fuc > plt_end){
-	//		cout << hex << fuc << " " << Add2Ref[fuc] << " " << DataRefMap[Add2Ref[fuc]] << endl;
-	//		set<unsigned> res = inst_list[fuc];
-	//		for (auto it : res){
-	//			cout << "Instructions: " << it << endl;
-	//		}
-	//	}else{
-	//		++plt_num;
-	//	}
-	//}
-	//cout << "fp in plt: " << dec << plt_num << endl;
+	identifiedWrong(identified, gt_functions, plt_start, plt_end, nops);
+	cout << "#########################" << endl;
+	cout << "#########################" << endl;
 }

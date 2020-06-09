@@ -9,11 +9,7 @@ do
 	res=${path//@//}
 	res=${res/./}
 	# skip nginx and continue
-	if [ $tmp = "libs" ]; then
-		continue
-	fi
 	if [ $tmp = "utils" ]; then
-		continue
 		file=$(echo "$path" | cut -d'@' -f 6)
 		cmp=$(echo "$line" | cut -d'@' -f 5)
 	else
