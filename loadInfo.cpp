@@ -23,17 +23,49 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 void CheckLinker(set<uint64_t> &fn_functions, const char* input){
+	string list[16] = {"<_start>", "<__x86.get_pc_thunk.bx>", "<__libc_csu_init>", "<__libc_csu_fini>", "<deregister_tm_clones>", "<register_tm_clones>", "<__do_global_dtors_aux>", "<frame_dummy>", "<atexit>", "<_dl_relocate_static_pie>", "<__stat>", "<stat64>", "<fstat64>", "<lstat64>", "<fstatat64>", "<__fstat>"};
+	set<string> linker_list;
+	for (int i = 0; i < 16; i++) {
+		linker_list.insert(list[i]);
+		//cout << list[i] << endl;
+	}
+	int linker_num = 0;
 	std::stringstream ss;
-	cout << "Size: " << sizeof(input) << endl;
-	//ss << "objdump -d " << input << " > /tmp/Dyninst_tmp_dump";
-	//system(ss.str().c_str());
+	string binary = input;
+	int index = binary.find(".strip");
+	binary = binary.substr(0, index);
+	ss << "objdump -d " << binary << " > /tmp/Dyninst_tmp_dump";
+	int k = system(ss.str().c_str());
+	for (auto func : fn_functions){
+		std::stringstream grep;
+		std::stringstream s1;
+		s1 << hex << func;
+		string addr (s1.str());
+		grep << "grep \"" << addr << "\" /tmp/Dyninst_tmp_dump | grep \">:\" > /tmp/tmp_linker";
+		int b = system(grep.str().c_str());
+		std::ifstream frame_file("/tmp/tmp_linker");
+		string line;
+		if (frame_file.is_open()){
+			while(std::getline(frame_file, line)){
+				int f = line.find(" <");
+				int len = line.length();
+				string name = line.substr(f+1, len-f-2);
+				if (linker_list.count(name)){
+					fn_functions.erase(func);
+					linker_num++;
+					//cout << line.substr(f+1, len-f-2) << endl;
+				}
+			}
+		}
+	}
+	cout << "Number of Linker Functions: " << dec << linker_num << endl;
 }
 
 
 void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions){
 	std::stringstream ss;
 	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d =  > /tmp/Dyninst_tmp_out.log";
-	system(ss.str().c_str());
+	int n = system(ss.str().c_str());
 	std::ifstream frame_file("/tmp/Dyninst_tmp_out.log");
 	std::string line;
 	std::string delimiter = "..";

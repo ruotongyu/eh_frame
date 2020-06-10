@@ -24,15 +24,30 @@ using namespace Dyninst::ParseAPI;
 
 //#define DEBUG
 
-void identifiedWrong(set<uint64_t> identified, set<uint64_t> gt_functions, uint64_t plt_start, uint64_t plt_end, set<uint64_t> nops) {
+void FilterNotInCode(set<uint64_t> &identified, vector<SymtabAPI::Region *> regs){
+	uint64_t sec_start, sec_end;
+	for (auto region : regs){
+		if (region->getRegionName() == ".text") {
+			sec_start = (uint64_t) region->getMemOffset();
+			sec_end = sec_start + region->getMemSize();
+		}
+	}
+	//cout << "start: " << hex << sec_start << " " << sec_end << endl;
+	for (auto func: identified){
+		if (func >= sec_start && func < sec_end) {
+			continue;
+		}else{
+			identified.erase(func);
+		}
+	}
+}
+
+void identifiedWrong(set<uint64_t> identified, set<uint64_t> gt_functions, set<uint64_t> nops) {
 	set<uint64_t> result;
-	//cout << "plt Section >> " << hex << plt_start << " " << plt_end << endl;
 	for (auto func: identified){
 		if (!gt_functions.count(func) && !nops.count(func)){
-			if (func < plt_start || func > plt_end){
-				//cout << "New False Positive: " << hex << func << endl;
-				result.insert(func);
-			}
+			cout << "New False Positive: " << hex << func << endl;
+			result.insert(func);
 		}
 	}
 
@@ -47,6 +62,7 @@ void PrintFuncResult(int raw_eh_num, int reu_eh_num, int gt_num) {
 
 void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj) {
 	set<Address> seen;
+	cout << "<<<<<<<<<<<<<<<Debug Result >>>>>>>>>>>>>>>>>" << endl;
 	for (auto func:codeobj.funcs()){
 		if(seen.count(func->addr())){
 			continue;
@@ -149,14 +165,6 @@ bool isInGaps(std::map<unsigned long, unsigned long> gap_regions, unsigned ref){
 	return false;
 }
 
-void getPltRegion(uint64_t &sec_start, uint64_t &sec_end, vector<SymtabAPI::Region *> regs){
-	for (auto re : regs){
-		if (re->getRegionName() == ".plt") {
-			sec_start = (unsigned long) re->getMemOffset();
-			sec_end = sec_start + re->getMemSize();
-		}
-	}
-}
 
 void Target2Addr(map<uint64_t, uint64_t> gt_ref, set<uint64_t> fn_functions){
 	map<uint64_t, uint64_t> result;

@@ -112,8 +112,12 @@ def compare_func():
 if __name__ == "__main__":
     options = parse_argument()
     path = options.input
-    load_func(path)
-    compare_func()
+    f = open("/tmp/pbTest.pb", "rb")
+    mModule = blocks_pb2.module()
+    mModule.ParseFromString(f.read())
+    fuc_set = func_addr(mModule)
+    print(len(fuc_set))
+    #compare_func()
     #f = open('/data/testsuite/libs/gcc_O2/libc', 'rb')
     #mModule1 = blocks_pb2.module()
     #mModule.ParseFromString(f.read())

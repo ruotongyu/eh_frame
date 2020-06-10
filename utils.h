@@ -7,7 +7,9 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 
-void identifiedWrong(set<uint64_t> identified, set<uint64_t> gt_functions, uint64_t plt_start, uint64_t plt_end, set<uint64_t> nops);
+void FilterNotInCode(set<uint64_t> &identified, vector<SymtabAPI::Region *> regs);
+
+void identifiedWrong(set<uint64_t> identified, set<uint64_t> gt_functions, set<uint64_t> nops);
 
 void PrintFuncResult(int raw_eh_num, int reu_eh_num, int gt_num);
 
@@ -29,8 +31,6 @@ void printMap(map<uint64_t, uint64_t> p_map);
 bool isInGaps(map<unsigned long, unsigned long> gap_regions, unsigned ref);
 
 void Target2Addr(map<uint64_t, uint64_t> gt_ref, set<uint64_t> fn_functions);
-
-void getPltRegion(uint64_t &sec_start, uint64_t &sec_end, vector<SymtabAPI::Region *> regs);
 
 set<uint64_t> compareFunc(set<uint64_t> eh_functions, set<uint64_t> gt_functions, bool flag);
 
