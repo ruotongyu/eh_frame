@@ -35,7 +35,7 @@ using namespace Dyninst::ParseAPI;
 //#define DEBUG_BASICBLOCK
 //#define FN_GAP_PRINT	
 //#define DEBUG_EHFUNC
-bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions){
+bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instructions, map<unsigned long, unsigned long>& gap_regions){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
 		if(seen.count( func->addr())){
@@ -67,7 +67,6 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instruc
 					return false;
 				}
 				//if (cur_addr >= 7086240 and cur_addr <= 7086340){
-				//	cout << hex << cur_addr << " " << inst.format() << endl;
 				//}
 				//Check conflict instructions
 				if (!all_instructions.count(cur_addr)) {
@@ -85,22 +84,22 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instruc
 	return true;
 }
 
-void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, set<uint64_t> known_func, blocks::module &pbModule) {
+void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule) {
 	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;
 	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
+	symtab_cs = new SymtabCodeSource(input_string);
 	for (auto addr: addr_set){
 		//auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 		//cout << "Disassemble gap at " << hex << addr << endl;
-		symtab_cs = new SymtabCodeSource(input_string);
-		code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
+		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, false);
+		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
+		code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, true);
 		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
+
 		code_obj_gap->parse(addr, true);
-		//if (addr == 5448336) {
-		//DebugDisassemble(*code_obj_gap);
-		//}
+		code_obj_gap->finalize();
 		if (Inst_help(*code_obj_gap, instructions, gap_regions)){
-			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			//DebugDisassemble(*code_obj_gap);
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();
@@ -132,11 +131,11 @@ void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instruct
 			}
 		}
 		delete code_obj_gap;
-		delete symtab_cs;
 	}
+	delete symtab_cs;
 }
 
-void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t> pc_funcs, set<uint64_t> &eh_functions) {
+void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t>& pc_funcs, set<uint64_t> &eh_functions) {
 	std::set<Dyninst::Address> seen;
 	for (auto func:codeobj.funcs()){
 		if (seen.count(func->addr())){
@@ -294,7 +293,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 }
 
 
-set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input, char* x64, map<Address, unsigned long> &RefMap){
+set<Address> getDataRef(std::vector<SymtabAPI::Region *>& regs, uint64_t offset, char* input, char* x64, map<Address, unsigned long> &RefMap){
 	size_t code_size;
 	struct stat results;
 	char *buffer;
