@@ -297,6 +297,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, char* input, char* x64, map<Address, unsigned long> &RefMap){
 	size_t code_size;
 	struct stat results;
+	char *buffer;
 	string list[6] = {".rodata", ".data", ".fini_array", ".init_array", ".data.rel.ro", ".data.rel.ro.local"};
 	set<string> white_list;
 	for (int i = 0; i < 6; ++i) {
@@ -308,7 +309,8 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 	}
 	set<Address> DataRef_res;
 	std::ifstream handleFile (input, std::ios::in | ios::binary);
-	char buffer[code_size];
+
+	buffer = new char[code_size + 1];
 	handleFile.read(buffer, code_size);
 	for (auto &reg: regs){
 		if (!white_list.count(reg->getRegionName())){
@@ -339,6 +341,8 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *> regs, uint64_t offset, 
 			RefMap[addr] = i + m_offset;
 		}
 	}
+
+	delete buffer;
 	return DataRef_res;
 }
 
