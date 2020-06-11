@@ -35,7 +35,7 @@ using namespace Dyninst::ParseAPI;
 //#define DEBUG_BASICBLOCK
 //#define FN_GAP_PRINT	
 //#define DEBUG_EHFUNC
-bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<uint64_t> &nops){
+bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
 		if(seen.count( func->addr())){
@@ -75,9 +75,9 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instruc
 						return false;
 					}
 				}
-				if (isNopInsn(inst)) {
-					nops.insert(cur_addr);
-				}
+				//if (isNopInsn(inst)) {
+				//	nops.insert(cur_addr);
+				//}
 				cur_addr += inst.size();
 			}
 		}
@@ -85,7 +85,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instruc
 	return true;
 }
 
-void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, set<uint64_t> known_func, set<uint64_t> &nops, blocks::module &pbModule) {
+void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instructions, map<unsigned long, unsigned long> gap_regions, set<uint64_t> known_func, blocks::module &pbModule) {
 	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;
 	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
@@ -99,7 +99,7 @@ void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instruct
 		//if (addr == 5448336) {
 		//DebugDisassemble(*code_obj_gap);
 		//}
-		if (Inst_help(*code_obj_gap, instructions, gap_regions, nops)){
+		if (Inst_help(*code_obj_gap, instructions, gap_regions)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			//DebugDisassemble(*code_obj_gap);
 			for (auto r_f : code_obj_gap->funcs()){
@@ -424,8 +424,8 @@ int main(int argc, char** argv){
 	set<Address> RefinGap;
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
-	set<uint64_t> nops;
-	CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, nops, pbModule);	
+	//set<uint64_t> nops;
+	CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule);	
 	//for (auto func: identified) {
 	//	cout << hex << func << endl; 
 	//}
