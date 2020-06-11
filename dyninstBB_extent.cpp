@@ -35,7 +35,7 @@ using namespace Dyninst::ParseAPI;
 //#define DEBUG_BASICBLOCK
 //#define FN_GAP_PRINT	
 //#define DEBUG_EHFUNC
-bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<unsigned> &dis_inst, set<uint64_t> &nops){
+bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instructions, map<unsigned long, unsigned long> gap_regions, set<uint64_t> &nops){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
 		if(seen.count( func->addr())){
@@ -54,14 +54,12 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> all_instruc
 				}
 				if (!all_instructions.count(succ_addr)){
 					if (!isInGaps(gap_regions, succ_addr)){
-						//cout << "Faill on Control flow Check" << endl;
 						return false;
 					}
 				}
 			}
 			// go through all instructions
 			for (auto it: instructions) {
-				dis_inst.insert(cur_addr);
 				Dyninst::InstructionAPI::Instruction inst = it.second;
 				//Check inlegall instruction
 				if (!inst.isLegalInsn() || !inst.isValid()){
@@ -98,11 +96,10 @@ void CheckInst(set<Address> addr_set, char* input_string, set<unsigned> instruct
 		code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
 		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
 		code_obj_gap->parse(addr, true);
-		set<unsigned> dis_inst;
 		//if (addr == 5448336) {
 		//DebugDisassemble(*code_obj_gap);
 		//}
-		if (Inst_help(*code_obj_gap, instructions, gap_regions, dis_inst, nops)){
+		if (Inst_help(*code_obj_gap, instructions, gap_regions, nops)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			//DebugDisassemble(*code_obj_gap);
 			for (auto r_f : code_obj_gap->funcs()){
@@ -354,24 +351,11 @@ int main(int argc, char** argv){
 	//char* input_block = argv[3];
 	char* x64 = argv[2];
 
-	// The number of functions extract from eh_frame
-	//int RAW_EH_NUM = 0;
-	// The number of functions from recursive disassemle from eh_frame
-	//int REU_EH_NUM = 0;
-	// load false negative functions with reference
-	//loadFnAddrs(input_string, ref2Addr);
 	getEhFrameAddrs(eh_functions, input_string, pc_funcs);
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
 	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 	
-	//get call instructions and functions from ground truth
-	//set<uint64_t> call_inst;
-	//set<uint64_t> gt_functions;
-	//blocks::module mModule;
-	//call_inst = loadGTFunc(input_block, mModule, gt_functions);
 	//set<uint64_t> raw_fn_functions = compareFunc(eh_functions, gt_functions, false);
-	//RAW_EH_NUM = raw_fn_functions.size();
-	//GT_NUM = gt_functions.size();
 	CHECK(code_obj_eh) << "Error: Fail to create ParseAPI::CodeObject";
 	code_obj_eh->parse();
 	uint64_t file_offset = symtab_cs->loadAddress();
@@ -408,12 +392,6 @@ int main(int argc, char** argv){
 	symtab_cs->getSymtabObject()->getCodeRegions(regs);
 	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
 	
-	// read reference ground truth from pb file
-	//map<uint64_t, uint64_t> gt_ref;
-	//RefInf::RefList refs_list;
-	//gt_ref = loadGTRef(input_pb, refs_list);
-	//get Tareget to Reference address
-	//Target2Addr(gt_ref, fn_functions);
 	//initialize gap regions
 	map<Address, Address> ref_addr;
 	set<Address> codeRef;
