@@ -126,14 +126,13 @@ BASE_ADDR_MAP = {"angr": 0x400000, "ghidra": 0x100000}
 disassembler_base_addr = 0x0
 PIE = False
 
-def compareFuncs(groundTruth, compared, ehFuncs, RawEhFuncs):
+def compareFuncs(groundTruth, compared, ehFuncs, RawEhFuncs, ScanBB):
     """
     compare the jump tables
     """
     raw_fn_num = 0
     linker_num = 0
     eh_num = 0
-    scan_num = 0
     scan_fn_num = 0
     eh_fn = set()
     scan_fn = set()
@@ -155,26 +154,57 @@ def compareFuncs(groundTruth, compared, ehFuncs, RawEhFuncs):
     for func in eh_fn:
         if func not in compared:
             scan_fn.add(func)
-            logging.error("[Scan False Negitive #{0}]:Function Start 0x{1:x} not in compared.".format(scan_fn_num, func))
+            #logging.error("[Scan False Negitive #{0}]:Function Start 0x{1:x} not in compared.".format(scan_fn_num, func))
             scan_fn_num+=1
-        else:
-            scan_num+=1
+    
+    FNInCode = 0
+    FNInGap = 0
+    fn_Gaps = set()
+    for func in scan_fn:
+        found = False
+        for bb in ScanBB.keys():
+            if func >= bb and func <= ScanBB[bb]:
+                logging.error("[False Negitive in Code #{0}]:Function Start 0x{1:x} not in compared.".format(FNInCode, func))
+                FNInCode += 1
+                found = True
+                break
+        if not found:
+            fn_Gaps.add(func)
+            
+    for func in fn_Gaps:        
+        logging.error("[False Negitive in Gaps #{0}]:Function Start 0x{1:x} not in compared.".format(FNInGap, func))
+        FNInGap += 1
 
-    #for func in tmpFunc:
-    #   if func not in compared:
-    #        if func in BLACKLIST_ADDRS:
-    #            continue
-    #        logging.error("[Func Start False Negitive #{0}]:Function Start 0x{1:x} not in compared.".format(falseNegitive, func))
-    #        falseNegitive += 1
+
+
     print("[Result]:The total Functions in ground truth is %d" % (len(groundTruth)))
     print("[Result]:The total FN Functions in linker is %d" % (linker_num))
     print("[Result]:The total FN Functions in raw ehframe is %d" % (len(fn_funcs)))
     print("[Result]:The total FN Functions in ehframe is %d" % (len(eh_fn)))
     print("[Result]:The total FN Functions in scan result is %d" % (len(scan_fn)))
+    print("[Result]:The total FN Functions in Gap Ranges is %d" % (FNInGap))
+    print("[Result]:The total FN Functions in Code Ranges %d" % (FNInCode))
     #print("[Result]:Linker Function number is %d" % (linker_num))
     #print("[Result]:Extra False positive number is %d" % (falsePositive))
     #print("[Result]:Identified Function number is %d" % (found))
     #print("[Result]:False negative number is %d" % (falseNegitive))
+
+def getBBRange(mModule):
+    BBRange = {}
+    for func in mModule.fuc:
+        if func.va == 0x0:
+            continue
+        funcAddr = func.va
+        if not isInTextSection(funcAddr):
+            continue
+        for bb in func.bb:
+            bb_start = bb.va
+            bb_end = 0
+            for inst in bb.instructions:
+                bb_end = inst.va + inst.size
+            BBRange[bb_start] = bb_end
+    return BBRange
+
 
 
 def readFuncs(mModule, groundTruth):
@@ -346,6 +376,8 @@ if __name__ == '__main__':
     truthFuncs = readFuncs(mModule1, True)
     pbFuncs = readFuncs(mModule2, False)
     ehFuncs = readFuncs(mModule3, False)
+    ScanBB = getBBRange(mModule3)
+
     not_included = checkGroundTruthFuncNotIncluded(groundTruthFuncRange, options.binaryFile)
     if not_included != None:
         logging.debug("Append the not included functions! {0}".format(not_included))
@@ -353,4 +385,4 @@ if __name__ == '__main__':
     
     RawEhFuncs = readFuncsFromEhFrame(strip_binary)
 
-    compareFuncs(truthFuncs, pbFuncs, ehFuncs, RawEhFuncs)
+    compareFuncs(truthFuncs, pbFuncs, ehFuncs, RawEhFuncs, ScanBB)
