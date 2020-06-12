@@ -11,6 +11,12 @@ fnum=0
 for file in `find $dirt -name "*.strip" | grep -v "shuffle"`; do
 	binary=$(echo "$file" | cut -d'/' -f 6)
 	tmp=${binary/.strip/}
+	if [ $tmp != "mysqld" ]; then
+		continue
+	fi
+	#if [ $tmp = "libxml2-.so.2.9.8" ]; then
+	#	continue
+	#fi
 	pb="ehRes_${tmp}"
 	pb="${pb}.pb"
 	gtRes=${file/$binary/$pb}
@@ -20,7 +26,7 @@ for file in `find $dirt -name "*.strip" | grep -v "shuffle"`; do
 		flag="x32"
 	fi
 	echo "Pb File: $gtRes"
-	./dyninstBB_extent $file $flag $gtRes
+	timeout 1h ./dyninstBB_extent $file $flag $gtRes
 	fnum=$((fnum+1))
 done
 echo "File Number: $fnum"

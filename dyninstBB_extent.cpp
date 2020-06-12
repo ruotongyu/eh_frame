@@ -366,6 +366,7 @@ int main(int argc, char** argv){
 		code_obj_eh->parse(addr, true);
 	}
 	
+	//DebugDisassemble(*code_obj_eh);
 	//pc_sets include all function start after recursive disassembling from ehframe
 	expandFunction(*code_obj_eh, pc_funcs, eh_functions);
 #ifdef DEBUG_EHFUNC	
