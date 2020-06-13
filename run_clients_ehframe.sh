@@ -11,9 +11,6 @@ fnum=0
 for file in `find $dirt -name "*.strip" | grep -v "shuffle"`; do
 	binary=$(echo "$file" | cut -d'/' -f 6)
 	tmp=${binary/.strip/}
-	if [ $tmp != "mysqld" ]; then
-		continue
-	fi
 	#if [ $tmp = "libxml2-.so.2.9.8" ]; then
 	#	continue
 	#fi

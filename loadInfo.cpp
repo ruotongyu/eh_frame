@@ -15,6 +15,8 @@
 #include <Dereference.h>
 #include "refInf.pb.h"
 #include "blocks.pb.h"
+#include <bits/stdc++.h>
+
 
 using namespace Dyninst;
 using namespace SymtabAPI;
@@ -62,11 +64,25 @@ void CheckLinker(set<uint64_t> &fn_functions, const char* input){
 }
 
 
+string getRandomString(int n){
+	char alphabet[26] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
+	string res = "";
+	for (int i = 0; i < n; i++){
+		res = res + alphabet[rand() % 26];
+	}
+	return res;
+}
+
 void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_t, uint64_t> &functions){
 	std::stringstream ss;
-	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d =  > /tmp/Dyninst_tmp_out.log";
+	std::stringstream dlt;
+	srand(time(NULL));
+	string rs = getRandomString(10);
+	ss << "readelf --debug-dump=frames " << input << " | grep pc | cut -f3 -d =  > /tmp/" << rs;
 	int n = system(ss.str().c_str());
-	std::ifstream frame_file("/tmp/Dyninst_tmp_out.log");
+	string reFile = "/tmp/";
+	reFile.append(rs);
+	std::ifstream frame_file(reFile);
 	std::string line;
 	std::string delimiter = "..";
 	if (frame_file.is_open()){
@@ -80,6 +96,8 @@ void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_
 			functions[pc_addr] = func_end;
 		}
 	}
+	dlt << "rm " << reFile;
+	int p = system(dlt.str().c_str());
 }
 
 set<uint64_t> loadGTFunc(char* input_pb, blocks::module& module, set<uint64_t> &functions) {

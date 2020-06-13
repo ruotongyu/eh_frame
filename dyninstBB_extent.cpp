@@ -100,6 +100,7 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 		code_obj_gap->parse(addr, true);
 		code_obj_gap->finalize();
 		if (Inst_help(*code_obj_gap, instructions, gap_regions)){
+			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			//DebugDisassemble(*code_obj_gap);
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();

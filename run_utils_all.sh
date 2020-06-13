@@ -4,9 +4,9 @@ declare -a options=("gcc_O0 gcc_O2 gcc_O3 gcc_Os gcc_Of gcc_m32_O0 gcc_m32_O2 gc
 for val in ${files[@]}; do
 	cmd="run_utils_ehframe.sh -i /data/testsuite/utils/"
        	cmd="${cmd}$val"	
-	if [ $val != "binutils/" ]; then
-		continue
-	fi
+	#if [ $val != "binutils/" ]; then
+	#	continue
+	#fi
 	for opt in ${options[@]}; do
 	#if [ $val != "binutils/" ]; then
 	#	continue
@@ -14,5 +14,6 @@ for val in ${files[@]}; do
 		res="${cmd}$opt"
 		echo "Run Command: $res"
 		bash $res
+		echo "=============next=========="
 	done
 done
