@@ -35,7 +35,7 @@ using namespace Dyninst::ParseAPI;
 //#define DEBUG_BASICBLOCK
 //#define FN_GAP_PRINT	
 //#define DEBUG_EHFUNC
-bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instructions, map<unsigned long, unsigned long>& gap_regions){
+bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t> &invalid_inst){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
 		if(seen.count( func->addr())){
@@ -69,6 +69,9 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 				//if (cur_addr >= 7086240 and cur_addr <= 7086340){
 				//}
 				//Check conflict instructions
+				if (invalid_inst.count(cur_addr)){
+					return false;
+				}
 				if (!all_instructions.count(cur_addr)) {
 					if (!isInGaps(gap_regions, cur_addr)){
 						return false;
@@ -81,7 +84,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 	return true;
 }
 
-void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule, set<uint64_t> &nops_inst, map<uint64_t, uint64_t> DataRef, map<uint64_t, uint64_t> CodeRef) {
+void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule, set<uint64_t> &nops_inst, map<uint64_t, uint64_t> DataRef, map<uint64_t, uint64_t> CodeRef, set<uint64_t> &invalid_inst) {
 	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;
 	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
@@ -96,7 +99,7 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 
 		code_obj_gap->parse(addr, true);
 		code_obj_gap->finalize();
-		if (Inst_help(*code_obj_gap, instructions, gap_regions)){
+		if (Inst_help(*code_obj_gap, instructions, gap_regions, invalid_inst)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
 			//cout << "Reference Address <<< Code: 0x" << hex << CodeRef[addr] << " <<< Data: 0x" << DataRef[addr] << endl;  
 			//DebugDisassemble(*code_obj_gap);
@@ -166,7 +169,7 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 	}
 }
 
-set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map, blocks::module &pbModule, set<uint64_t> &nops_inst){
+set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map, blocks::module &pbModule, set<uint64_t> &nops_inst, set<uint64_t> &invalid_inst){
 	std::set<Dyninst::Address> seen;
 	set<uint64_t> block_list;
 	for (auto func:codeobj.funcs()){
@@ -191,6 +194,9 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 				pbInst->set_va(cur_addr);
 				pbInst->set_size(inst.size());
 				all_instructions.insert(cur_addr);
+				for (int i = 1; i < inst.size(); i++){
+					invalid_inst.insert(cur_addr + i);
+				}
 				cur_addr += inst.size();
 				if (isNopInsn(inst)) {
 					nops_inst.insert(cur_addr);
@@ -386,7 +392,8 @@ int main(int argc, char** argv){
 	map<uint64_t, uint64_t> bb_map;
 	set<uint64_t> nops_inst;
 	blocks::module pbModule;
-	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map, pbModule, nops_inst);
+	set<uint64_t> invalid_inst;
+	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map, pbModule, nops_inst, invalid_inst);
 #ifdef DEBUG_BASICBLOCK	
 	printMap(bb_map);
 	exit(1);
@@ -438,7 +445,7 @@ int main(int argc, char** argv){
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	//set<uint64_t> nops;
-	CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule, nops_inst, DataRefMap, ref_addr);	
+	CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule, nops_inst, DataRefMap, ref_addr, invalid_inst);	
 	//for (auto func: identified) {
 	//	cout << hex << func << endl; 
 	//}
