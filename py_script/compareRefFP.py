@@ -118,6 +118,7 @@ def readFuncsFromSyms(binary):
 
     return result
 
+
 def randomString(stringLength=10):
     """Generate a random string of fixed length """
 
@@ -134,7 +135,7 @@ BASE_ADDR_MAP = {"angr": 0x400000, "ghidra": 0x100000}
 disassembler_base_addr = 0x0
 PIE = False
 
-def compareFuncs(groundTruth, compared, ehFuncs, gtRef, binary, JumpAddr):
+def compareFuncs(groundTruth, compared, ehFuncs, gtRef, binary, JumpAddr, BB_dict):
     EhFPFuncs = set()
     ehFPNum = 0
     for func in ehFuncs:
@@ -154,12 +155,17 @@ def compareFuncs(groundTruth, compared, ehFuncs, gtRef, binary, JumpAddr):
 
     fpFunctions = set()
     fpNum = 0
+    dataNum = 0
     for func in ScanFunc:
         if func not in groundTruth:
-            fpFunctions.add(func)
-            logging.error("[False Positive in Ref Disassembling #{0}]:Function Start 0x{1:x} not in compared.".format(fpNum, func))
-            fpNum += 1
-    
+            if isFuncInBasicBlock(func, BB_dict):
+                logging.error("[False Positive in Ref Disassembling #{0}]:Function Start 0x{1:x} not in compared.".format(fpNum, func))
+                fpFunctions.add(func)
+                fpNum += 1
+            else:
+                logging.error("[False Positive Data in Code #{0}]:Function Start 0x{1:x} not in compared.".format(dataNum, func))
+                dataNum += 1
+
     jumpNum = 0
     for func in fpFunctions:
         if func in JumpAddr:
@@ -169,7 +175,7 @@ def compareFuncs(groundTruth, compared, ehFuncs, gtRef, binary, JumpAddr):
     print("[Handle File]: ", binary)
     print("[Result]:The total Functions in ground truth is %d" % (len(groundTruth)))
     print("[Result]:The total FP Functions in EhFrame Disassembling is %d" % (ehFPNum))
-    print("[Result]:The total FP Functions in Reference Disassembling is %d" % (fpNum))
+    print("[Result]:The total FP Functions in Reference Disassembling is %d" % (fpNum + dataNum))
     print("[Result]:The total FP Functions caused by Jump is %d" % (jumpNum))
     #print("[Result]:The total FN Functions in pcThunk is %d" % (pcthunk_num))
     #print("[Result]:The total FN Functions in raw ehframe is %d" % (len(fn_funcs)))
@@ -200,6 +206,23 @@ def getReference(refInf):
         refList[ref.ref_va] = ref.target_va
     return refList
 
+def readBasicBlock(mModule):
+    bb_dict = {}
+    for func in mModule.fuc:
+        if func.va == 0x0:
+            continue
+        funcAddr = func.va
+        if not isInTextSection(funcAddr):
+            continue
+        for bb in func.bb:
+            bb_dict[bb.va] = bb.size + bb.padding
+    return bb_dict
+
+def isFuncInBasicBlock(func, BB_dict):
+    for bb in BB_dict:
+        if func >= bb and func <= (bb + BB_dict[bb]):
+            return True
+    return False       
 
 def readFuncs(mModule, groundTruth):
     """
@@ -380,11 +403,11 @@ if __name__ == '__main__':
     pbFuncs = readFuncs(mModule2, False)
     ehFuncs = readFuncs(mModule3, False)
     JumpAddr = getJumpAddr(mModule1)
+    BB_dict = readBasicBlock(mModule1)
     gtRef = getReference(refInf1)
     not_included = checkGroundTruthFuncNotIncluded(groundTruthFuncRange, options.binaryFile)
     if not_included != None:
         logging.debug("Append the not included functions! {0}".format(not_included))
         truthFuncs |= not_included
     
-
-    compareFuncs(truthFuncs, pbFuncs, ehFuncs, gtRef, options.binaryFile, JumpAddr)
+    compareFuncs(truthFuncs, pbFuncs, ehFuncs, gtRef, options.binaryFile, JumpAddr, BB_dict)

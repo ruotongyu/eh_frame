@@ -68,6 +68,7 @@ void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj) {
 			continue;
 		}
 		seen.insert(func->addr());
+		cout << "Function Start: " << hex << func->addr() << endl;
 		for(auto block: func->blocks()){
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);

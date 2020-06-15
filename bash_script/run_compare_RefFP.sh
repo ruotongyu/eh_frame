@@ -56,12 +56,14 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   #echo "current to be handled file is $file"
   replace_tmp1=${file//strip_/}
   binary_file=${replace_tmp1//\.strip/}
-
   dir_name=`dirname $binary_file`
   tmp1=$(echo "$dir_name" | cut -d'_' -f 1)
   tmp2=${tmp1}_strip
   sdir=${dir_name/$tmp1/$tmp2}
   base_name=`basename $binary_file`
+  if [ $base_name = "libc-2.27.so" ]; then
+	  continue
+  fi
   ehname=${sdir}/Block-dyninstBB_ehframe-${base_name}.strip.pb
   gtBlock_file=${dir_name}/gtBlock_${base_name}.pb
   ref=${dir_name}/gtRef_${base_name}.pb

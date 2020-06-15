@@ -74,9 +74,6 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 						return false;
 					}
 				}
-				//if (isNopInsn(inst)) {
-				//	nops.insert(cur_addr);
-				//}
 				cur_addr += inst.size();
 			}
 		}
@@ -84,14 +81,14 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 	return true;
 }
 
-void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule) {
+void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule, set<uint64_t> &nops_inst, map<uint64_t, uint64_t> DataRef, map<uint64_t, uint64_t> CodeRef) {
 	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;
 	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
 	symtab_cs = new SymtabCodeSource(input_string);
 	for (auto addr: addr_set){
 		//auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
-		//cout << "Disassemble gap at " << hex << addr << endl;
+	//	cout << "Disassemble gap at " << hex << addr << endl;
 		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, false);
 		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
 		code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, true);
@@ -101,14 +98,17 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 		code_obj_gap->finalize();
 		if (Inst_help(*code_obj_gap, instructions, gap_regions)){
 			//cout << "Disassembly Address is 0x" << hex << addr << endl;
+			//cout << "Reference Address <<< Code: 0x" << hex << CodeRef[addr] << " <<< Data: 0x" << DataRef[addr] << endl;  
 			//DebugDisassemble(*code_obj_gap);
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();
 				blocks::Function* pbFunc = pbModule.add_fuc();
-				if (known_func.count(func_addr)){
+				if (known_func.count(func_addr) || nops_inst.count(func_addr)){
 					continue;
 				}
-				pbFunc->set_va(r_f->addr());
+				//uint64_t func_end = (uint64_t) r_f->addr();
+				//pbFunc->set_va(r_f->addr());
+				int inst_num = 0;
 				for (auto block: r_f->blocks()){
 					blocks::BasicBlock* pbBB = pbFunc->add_bb();
 					pbBB->set_va(block->start());
@@ -116,18 +116,21 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 					Dyninst::ParseAPI::Block::Insns instructions;
 					block->getInsns(instructions);
 					uint64_t cur_addr = block->start();
-
 					for (auto p: instructions){
 						Dyninst::InstructionAPI::Instruction inst = p.second;
 						blocks::Instruction* pbInst = pbBB->add_instructions();
 						pbInst->set_va(cur_addr);
 						pbInst->set_size(inst.size());
 						cur_addr += inst.size();
+						inst_num += 1;
 					}
 					for (auto succ: block->targets()) {
 						blocks::Child* pbSuc = pbBB->add_child();
 						pbSuc->set_va(succ->trg()->start());
 					}
+				}
+				if (inst_num > 0) {
+					pbFunc->set_va(r_f->addr());
 				}
 			}
 		}
@@ -163,7 +166,7 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 	}
 }
 
-set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map, blocks::module &pbModule){
+set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map, blocks::module &pbModule, set<uint64_t> &nops_inst){
 	std::set<Dyninst::Address> seen;
 	set<uint64_t> block_list;
 	for (auto func:codeobj.funcs()){
@@ -189,6 +192,9 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 				pbInst->set_size(inst.size());
 				all_instructions.insert(cur_addr);
 				cur_addr += inst.size();
+				if (isNopInsn(inst)) {
+					nops_inst.insert(cur_addr);
+				}
 				//cout << "Instruction Addr " << hex << cur_addr  << endl;
 			}
 			for (auto succ: block->targets()){
@@ -211,7 +217,7 @@ bool isCFIns(InstructionAPI::Instruction* ins){
 			return false;
 	}
 }
-set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Address> &ref_addr) {
+set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t> &ref_addr) {
 	set<Address> constant;
 	Address ref_value;
 	// pc pointer
@@ -236,7 +242,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 					if (auto imm = dynamic_cast<InstructionAPI::Immediate *>(expr.get())) { // immediate operand
 						Address addr = imm->eval().convert<Address>();
 						constant.insert(addr);
-						ref_addr[addr] = cur_addr;
+						ref_addr[(uint64_t) addr] = (uint64_t) cur_addr;
 #ifdef DEBUG
 						cout << "[ref imm]: instruction at " << hex << cur_addr << " ref target is " << addr << endl;
 #endif
@@ -253,7 +259,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 							ref_value = d_expr->eval().convert<Address>();
 							constant.insert(ref_value);
 							if (ref_value){
-								ref_addr[ref_value] = cur_addr;
+								ref_addr[(uint64_t) ref_value] = (uint64_t) cur_addr;
 								constant.insert(ref_value);
 #ifdef DEBUG
 								cout << "[ref mem]: instruction at " << hex << cur_addr << " ref target is " << ref_value << endl;
@@ -266,7 +272,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 								if (auto dref_imm = dynamic_cast<InstructionAPI::Immediate *>(dref_expr.get())){
 										ref_value = dref_imm->eval().convert<Address>();
 										constant.insert(ref_value);
-										ref_addr[ref_value] = cur_addr;
+										ref_addr[(uint64_t) ref_value] = (uint64_t) cur_addr;
 										//cout << "instruction addr: " << std::hex << cur_addr << " mem operand is " << std::hex << ref_value << endl;
 										}
 							}
@@ -279,7 +285,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 						binary_func->bind(&thePC, InstructionAPI::Result(InstructionAPI::u64, next_addr));
 						ref_value = binary_func->eval().convert<Address>();
 						if (ref_value){
-							ref_addr[ref_value] = cur_addr;
+							ref_addr[(uint64_t) ref_value] = (uint64_t) cur_addr;
 							constant.insert(ref_value);
 #ifdef DEBUG
 							cout << "[ref bin]: instruction at " << hex << cur_addr << " ref target is " << ref_value << endl;
@@ -294,7 +300,7 @@ set<Address> getOperand(Dyninst::ParseAPI::CodeObject &codeobj, map<Address, Add
 }
 
 
-set<Address> getDataRef(std::vector<SymtabAPI::Region *>& regs, uint64_t offset, char* input, char* x64, map<Address, unsigned long> &RefMap){
+set<Address> getDataRef(std::vector<SymtabAPI::Region *>& regs, uint64_t offset, char* input, char* x64, map<uint64_t, uint64_t> &RefMap){
 	size_t code_size;
 	struct stat results;
 	char *buffer;
@@ -338,7 +344,7 @@ set<Address> getDataRef(std::vector<SymtabAPI::Region *>& regs, uint64_t offset,
 			}
 			//cout << hex << *res << "  "<<endl;
 			DataRef_res.insert(addr);
-			RefMap[addr] = i + m_offset;
+			RefMap[(uint64_t) addr] = (uint64_t) (i + m_offset);
 		}
 	}
 
@@ -378,8 +384,9 @@ int main(int argc, char** argv){
 	set<unsigned> instructions;
 	set<uint64_t> bb_list;
 	map<uint64_t, uint64_t> bb_map;
+	set<uint64_t> nops_inst;
 	blocks::module pbModule;
-	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map, pbModule);
+	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map, pbModule, nops_inst);
 #ifdef DEBUG_BASICBLOCK	
 	printMap(bb_map);
 	exit(1);
@@ -398,7 +405,7 @@ int main(int argc, char** argv){
 	symtab_cs->getSymtabObject()->getDataRegions(data_regs);
 	
 	//initialize gap regions
-	map<Address, Address> ref_addr;
+	map<uint64_t, uint64_t> ref_addr;
 	set<Address> codeRef;
 	codeRef = getOperand(*code_obj_eh, ref_addr);
 	map<uint64_t, uint64_t> gap_regions;
@@ -419,9 +426,10 @@ int main(int argc, char** argv){
 	//exit(1);
 	//initialize data reference
 	set<Address> dataRef;
-	map<Address, unsigned long> DataRefMap;
+	map<uint64_t, uint64_t> DataRefMap;
 	dataRef = getDataRef(data_regs, file_offset, input_string, x64, DataRefMap);
 	
+	//cout << "Data: " << hex << DataRefMap[4915278] << "Code: " << ref_addr[4915278] << endl;
 	//merge code ref and data ref
 	unionSet(codeRef, dataRef);
 
@@ -430,7 +438,7 @@ int main(int argc, char** argv){
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	//set<uint64_t> nops;
-	CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule);	
+	CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule, nops_inst, DataRefMap, ref_addr);	
 	//for (auto func: identified) {
 	//	cout << hex << func << endl; 
 	//}

@@ -2,7 +2,7 @@
 
 
 if __name__ == "__main__":
-    f = open('/tmp/binutils_fp.log', 'r')
+    f = open('/tmp/libs_fp.log', 'r')
     eh_num = 0
     func_num = 0
     jumpNum = 0
