@@ -42,17 +42,6 @@ void FilterNotInCode(set<uint64_t> &identified, vector<SymtabAPI::Region *> regs
 	}
 }
 
-void identifiedWrong(set<uint64_t> identified, set<uint64_t> gt_functions, set<uint64_t> nops) {
-	set<uint64_t> result;
-	for (auto func: identified){
-		if (!gt_functions.count(func) && !nops.count(func)){
-			cout << "New False Positive: " << hex << func << endl;
-			result.insert(func);
-		}
-	}
-
-	cout << "New False Positive: " << hex << result.size() << endl;
-}
 
 void PrintFuncResult(int raw_eh_num, int reu_eh_num, int gt_num) {
 	cout << "Number of Ground Truth Functions: " << dec << gt_num << endl;
@@ -126,20 +115,6 @@ void functionInGaps(set<uint64_t> fn_functions, set<uint64_t> &fnInGap, set<uint
 			fnNotGap.insert(func);
 		}
 	}
-}
-
-
-// get all cases where searched by basic block. Tail Call
-set<uint64_t> printTailCall(set<uint64_t> fn_functions, set<uint64_t> pc_sets, set<uint64_t> bb_list) {
-	set<uint64_t> tailCall;
-	for (auto func : fn_functions){
-		if (!pc_sets.count(func)){
-			if (bb_list.count(func)){
-				tailCall.insert(func);
-			}
-		}
-	}
-	return tailCall;
 }
 
 

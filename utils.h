@@ -9,8 +9,6 @@ using namespace Dyninst::ParseAPI;
 
 void FilterNotInCode(set<uint64_t> &identified, vector<SymtabAPI::Region *> regs);
 
-void identifiedWrong(set<uint64_t> identified, set<uint64_t> gt_functions, set<uint64_t> nops);
-
 void PrintFuncResult(int raw_eh_num, int reu_eh_num, int gt_num);
 
 void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj);
@@ -20,9 +18,6 @@ void getFunctions(set<uint64_t> identified, set<uint64_t> fn_functions, set<uint
 void PrintRefInGaps(set<uint64_t> fnInGap, map<uint64_t, uint64_t> gt_ref, map<uint64_t, uint64_t> &withRef);
 
 void functionInGaps(set<uint64_t> fn_functions, set<uint64_t> &fnInGap, set<uint64_t> &fnNotGap, map<uint64_t, uint64_t> gap_regions);
-
-map<uint64_t, uint64_t> printUndetectedFN(map<uint64_t, uint64_t> ref2Addr, set<uint64_t> pc_sets, map<uint64_t, uint64_t> pc_funcs);
-set<uint64_t> printTailCall(set<uint64_t> fn_functions, set<uint64_t> pc_sets, set<uint64_t> bb_list);
 
 void printSet(set<uint64_t> p_set);
 

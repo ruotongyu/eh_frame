@@ -24,45 +24,6 @@ using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
-void CheckLinker(set<uint64_t> &fn_functions, const char* input){
-	string list[16] = {"<_start>", "<__x86.get_pc_thunk.bx>", "<__libc_csu_init>", "<__libc_csu_fini>", "<deregister_tm_clones>", "<register_tm_clones>", "<__do_global_dtors_aux>", "<frame_dummy>", "<atexit>", "<_dl_relocate_static_pie>", "<__stat>", "<stat64>", "<fstat64>", "<lstat64>", "<fstatat64>", "<__fstat>"};
-	set<string> linker_list;
-	for (int i = 0; i < 16; i++) {
-		linker_list.insert(list[i]);
-		//cout << list[i] << endl;
-	}
-	int linker_num = 0;
-	std::stringstream ss;
-	string binary = input;
-	int index = binary.find(".strip");
-	binary = binary.substr(0, index);
-	ss << "objdump -d " << binary << " > /tmp/Dyninst_tmp_dump";
-	int k = system(ss.str().c_str());
-	for (auto func : fn_functions){
-		std::stringstream grep;
-		std::stringstream s1;
-		s1 << hex << func;
-		string addr (s1.str());
-		grep << "grep \"" << addr << "\" /tmp/Dyninst_tmp_dump | grep \">:\" > /tmp/tmp_linker";
-		int b = system(grep.str().c_str());
-		std::ifstream frame_file("/tmp/tmp_linker");
-		string line;
-		if (frame_file.is_open()){
-			while(std::getline(frame_file, line)){
-				int f = line.find(" <");
-				int len = line.length();
-				string name = line.substr(f+1, len-f-2);
-				if (linker_list.count(name)){
-					fn_functions.erase(func);
-					linker_num++;
-					//cout << line.substr(f+1, len-f-2) << endl;
-				}
-			}
-		}
-	}
-	cout << "Number of Linker Functions: " << dec << linker_num << endl;
-}
-
 
 string getRandomString(int n){
 	char alphabet[26] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
@@ -98,53 +59,6 @@ void getEhFrameAddrs(std::set<uint64_t>& pc_sets, const char* input, map<uint64_
 	}
 	dlt << "rm " << reFile;
 	int p = system(dlt.str().c_str());
-}
-
-set<uint64_t> loadGTFunc(char* input_pb, blocks::module& module, set<uint64_t> &functions) {
-	set<uint64_t> call_inst;
-	std::fstream input(input_pb, std::ios::in | std::ios::binary);
-	if (!input) {
-		cout << "Could not open the file " << input_pb << endl;
-	}
-	if (!module.ParseFromIstream(&input)){
-		cout << "Could not load pb file" << input_pb << endl;
-	}
-	for (auto func : module.fuc()) {
-		functions.insert(func.va());
-		for (auto bb : func.bb()){
-			for (auto inst : bb.instructions()){
-				if (inst.call_type() == 3){
-					call_inst.insert(inst.va());			
-				}
-			}
-		}
-	}
-	return call_inst;
-}
-
-
-// load ground truth reference from protocol buffer
-// save as target to reference
-map<uint64_t, uint64_t> loadGTRef(char* input_pb, RefInf::RefList &reflist) {
-	map<uint64_t, uint64_t> target_addr;
-	std::fstream input(input_pb, std::ios::in | std::ios::binary);
-	if (!input) {
-		cout << "Could not open the file " << input_pb << endl;
-		exit(1);
-	}
-	if (!reflist.ParseFromIstream(&input)){
-		cout << "Could not load pb file" << input_pb << endl;
-		exit(1);
-	}
-	uint64_t target_va, ref_va;
-	for (int i = 0; i < reflist.ref_size(); i++){
-		const RefInf::Reference& cur_ref = reflist.ref(i);
-		ref_va = cur_ref.ref_va();
-		target_va = cur_ref.target_va();
-		target_addr[target_va] = ref_va;
-		//cout << hex << target_va << endl;
-	}
-	return target_addr;
 }
 
 void loadFnAddrs(char* input, map<uint64_t, uint64_t> &ref2func){
