@@ -16,13 +16,61 @@
 #include "refInf.pb.h"
 #include "blocks.pb.h"
 
+// for liveness analysis
+#include "Location.h"
+#include "livenessAnaEhframe.h"
+#include "bitArray.h"
+
 using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
+#define LIVENESS_DEBUG
 
 //#define DEBUG
+
+// blacklist
+// ds, es, fs, gs, cs, ss
+bool CheckUndefRegs(uint64_t addr, std::map<MachRegister,int>* regs_map, const bitArray& b_arr){
+    bool has_undef_regs = false;
+    std::set<std::string> segment_list = {"es", "fs", "ds", "gs", "cs", "ss"};
+
+    for (auto item : *regs_map){
+	if(b_arr[item.second] && !item.first.isPC() && !item.first.isStackPointer() && 
+		segment_list.find(item.first.name()) != segment_list.end()){
+#ifndef LIVENESS_DEBUG
+	    cout << "[undef reg]: func : " << addr << ",  reg:" << item.first.name() << std::endl;
+#endif
+	    has_undef_regs = true;
+	}
+    }
+
+    return has_undef_regs;
+}
+
+// return true if it can pass the check of calling convension
+bool CallingConvensionCheck(ParseAPI::Function* f){
+    EHFrameAna::LivenessAnalyzer la(f->obj()->cs()->getAddressWidth());
+
+    ABI* abi = la.getABI();
+
+    bitArray callread_regs = abi->getCallReadRegisters();
+
+    bitArray liveEntry;
+
+    // construct a liveness query location
+    ParseAPI::Location loc(f, f->entry());
+
+
+    if (la.query(loc, EHFrameAna::LivenessAnalyzer::Before, liveEntry)){
+	liveEntry -= callread_regs;
+	if (liveEntry.size() > 0){
+	    return !CheckUndefRegs(f->addr(), abi->getIndexMap(), liveEntry);
+	}
+    }
+    return true;
+}
 
 void FilterNotInCode(set<uint64_t> &identified, vector<SymtabAPI::Region *> regs){
 	uint64_t sec_start, sec_end;
