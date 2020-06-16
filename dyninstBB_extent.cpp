@@ -111,7 +111,6 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 				}
 
 				if (!CallingConvensionCheck(r_f)) {
-					cout << "aha, filter function " << hex << func_addr << endl;
 					continue;	
 				}
 
