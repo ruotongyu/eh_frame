@@ -29,15 +29,17 @@ using namespace Dyninst::ParseAPI;
 
 //#define DEBUG
 
+bool isMMXRegs(int regClass){
+    return 0 != (regClass & x86::MMX);
+}
 // blacklist
 // ds, es, fs, gs, cs, ss
 bool CheckUndefRegs(uint64_t addr, std::map<MachRegister,int>* regs_map, const bitArray& b_arr){
     bool has_undef_regs = false;
-    std::set<std::string> segment_list = {"es", "fs", "ds", "gs", "cs", "ss"};
 
     for (auto item : *regs_map){
-	if(b_arr[item.second] && !item.first.isPC() && !item.first.isStackPointer() && 
-		segment_list.find(item.first.name()) == segment_list.end()){
+	if(b_arr[item.second] && !item.first.isPC() && !item.first.isStackPointer() \
+	                    && !item.first.isFlag() && !isSegmentRegister(item.first.regClass())){
 #ifdef LIVENESS_DEBUG
 	    cout << "[undef reg]: func : " << addr << ",  reg:" << item.first.name() << std::endl;
 #endif
