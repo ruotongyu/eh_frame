@@ -100,14 +100,17 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 		code_obj_gap->parse(addr, true);
 		code_obj_gap->finalize();
 		if (Inst_help(*code_obj_gap, instructions, gap_regions, invalid_inst)){
-			//cout << "Disassembly Address is 0x" << hex << addr << endl;
-			//cout << "Reference Address <<< Code: 0x" << hex << CodeRef[addr] << " <<< Data: 0x" << DataRef[addr] << endl;  
-			//DebugDisassemble(*code_obj_gap);
+			cout << "Disassembly Address is 0x" << hex << addr << endl;
+			cout << "Reference Address <<< Code: 0x" << hex << CodeRef[addr] << " <<< Data: 0x" << DataRef[addr] << endl;  
+			DebugDisassemble(*code_obj_gap);
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();
 				blocks::Function* pbFunc = pbModule.add_fuc();
 				if (known_func.count(func_addr) || nops_inst.count(func_addr)){
 					continue;
+				}
+				if (!CallingConvensionCheck(r_f)) {
+					continue;	
 				}
 				//uint64_t func_end = (uint64_t) r_f->addr();
 				//pbFunc->set_va(r_f->addr());
