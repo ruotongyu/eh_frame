@@ -35,6 +35,7 @@ using namespace Dyninst::ParseAPI;
 //#define DEBUG_BASICBLOCK
 //#define FN_GAP_PRINT	
 //#define DEBUG_EHFUNC
+#define DEBUG_DISASSEMBLE
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t> &invalid_inst){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
@@ -100,9 +101,11 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 		code_obj_gap->parse(addr, true);
 		code_obj_gap->finalize();
 		if (Inst_help(*code_obj_gap, instructions, gap_regions, invalid_inst)){
+#ifdef DEBUG_DISASSEMBLE
 			cout << "Disassembly Address is 0x" << hex << addr << endl;
 			cout << "Reference Address <<< Code: 0x" << hex << CodeRef[addr] << " <<< Data: 0x" << DataRef[addr] << endl;  
 			DebugDisassemble(*code_obj_gap);
+#endif
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();
 				blocks::Function* pbFunc = pbModule.add_fuc();
@@ -110,13 +113,14 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 					continue;
 				}
 
-				if (!CallingConvensionCheck(r_f)) {
-					continue;	
-				}
+				//if (!CallingConvensionCheck(r_f)) {
+				//	continue;	
+				//}
 
 				//uint64_t func_end = (uint64_t) r_f->addr();
 				//pbFunc->set_va(r_f->addr());
 				int inst_num = 0;
+				bool NopFunc = false;
 				for (auto block: r_f->blocks()){
 					blocks::BasicBlock* pbBB = pbFunc->add_bb();
 					pbBB->set_va(block->start());
@@ -129,6 +133,9 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 						blocks::Instruction* pbInst = pbBB->add_instructions();
 						pbInst->set_va(cur_addr);
 						pbInst->set_size(inst.size());
+						if (inst_num == 0 && isNopInsn(inst)){
+							NopFunc = true;
+						}
 						cur_addr += inst.size();
 						inst_num += 1;
 					}
@@ -137,7 +144,7 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 						pbSuc->set_va(succ->trg()->start());
 					}
 				}
-				if (inst_num > 0) {
+				if (inst_num > 0 && !NopFunc) {
 					pbFunc->set_va(r_f->addr());
 				}
 			}
