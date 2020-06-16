@@ -106,6 +106,19 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 			cout << "Reference Address <<< Code: 0x" << hex << CodeRef[addr] << " <<< Data: 0x" << DataRef[addr] << endl;  
 			DebugDisassemble(*code_obj_gap);
 #endif
+			ParseAPI::Function* entry_f = nullptr; 
+
+			for(auto cur_f : code_obj_gap->funcs()){
+				if (addr == cur_f->addr()){
+					entry_f = cur_f;
+					break;
+				}
+			}
+
+			if (!entry_f || !CallingConvensionCheck(entry_f)){
+				continue;
+			}
+
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();
 				blocks::Function* pbFunc = pbModule.add_fuc();
@@ -113,9 +126,6 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 					continue;
 				}
 
-				//if (!CallingConvensionCheck(r_f)) {
-				//	continue;	
-				//}
 
 				//uint64_t func_end = (uint64_t) r_f->addr();
 				//pbFunc->set_va(r_f->addr());

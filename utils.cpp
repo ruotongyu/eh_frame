@@ -50,8 +50,43 @@ bool CheckUndefRegs(uint64_t addr, std::map<MachRegister,int>* regs_map, const b
     return has_undef_regs;
 }
 
+void debugStackHeight(uint64_t addr, std::map<MachRegister,int>* regs_map, const bitArray& b_arr){
+
+    for (auto item : *regs_map){
+	if(b_arr[item.second] && !item.first.isPC() && !item.first.isStackPointer() \
+	                    && !item.first.isFlag() && !isSegmentRegister(item.first.regClass())){
+#ifdef LIVENESS_DEBUG
+	    cout << "[debug reg]: bb : " << addr << ",  reg:" << item.first.name() << std::endl;
+#endif
+	}
+    }
+}
+
+void debugLiveness(ParseAPI::Function *f){
+    EHFrameAna::LivenessAnalyzer la(f->obj()->cs()->getAddressWidth());
+
+    ABI* abi = la.getABI();
+
+    bitArray callread_regs = abi->getCallReadRegisters();
+
+    bitArray liveEntry;
+
+    // construct a liveness query location
+    for ( auto b : f->blocks()){
+	    ParseAPI::Location loc(f, f->entry());
+
+	    if (la.query(loc, EHFrameAna::LivenessAnalyzer::Before, liveEntry)){
+		liveEntry -= callread_regs;
+		if (liveEntry.size() > 0){
+		    debugStackHeight(b->start(), abi->getIndexMap(), liveEntry);
+		}
+	    }
+    }
+}
+
 // return true if it can pass the check of calling convension
 bool CallingConvensionCheck(ParseAPI::Function* f){
+
     EHFrameAna::LivenessAnalyzer la(f->obj()->cs()->getAddressWidth());
 
     ABI* abi = la.getABI();

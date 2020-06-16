@@ -457,8 +457,8 @@ ReadWriteInfo LivenessAnalyzer::calcRWSets(Instruction curInsn, Block *blk, Addr
   ret.written = abi->getBitArray();
   ret.insnSize = curInsn.size();
 
-  if (isNopInsn(curInsn))
-   return ret;
+  //if (isNopInsn(curInsn))
+   //return ret;
 
   std::set<RegisterAST::Ptr> cur_read, cur_written;
 
@@ -512,7 +512,7 @@ ReadWriteInfo LivenessAnalyzer::calcRWSets(Instruction curInsn, Block *blk, Addr
       if (pure_registers && read_regs.size() == 2){
 	  if (read_regs[0]->getID() == read_regs[1]->getID()){
 	      xor_op = true;
-	      cout << hex << " addr: " << a << ", " << curInsn.format() << " delete!" << endl;
+	      //cout << hex << " addr: " << a << ", " << curInsn.format() << " delete!" << endl;
 	  }
       }
   } else {
@@ -605,13 +605,14 @@ ReadWriteInfo LivenessAnalyzer::calcRWSets(Instruction curInsn, Block *blk, Addr
       }
     }
   }
+
   InsnCategory category = curInsn.getCategory();
   switch(category)
   {
   case c_CallInsn:
       // Call instructions not at the end of a block are thunks, which are not ABI-compliant.
       // So make conservative assumptions about what they may read (ABI) but don't assume they write anything.
-      ret.read |= (abi->getCallReadRegisters());
+      //ret.read |= (abi->getCallReadRegisters());
       if(blk->lastInsnAddr() == a)
       {
           ret.written |= (abi->getCallWrittenRegisters());
@@ -625,7 +626,7 @@ ReadWriteInfo LivenessAnalyzer::calcRWSets(Instruction curInsn, Block *blk, Addr
     if(!curInsn.allowsFallThrough() && isExitBlock(blk))
     {
       //Tail call, union of call and return
-      ret.read |= (abi->getCallReadRegisters());
+      //ret.read |= (abi->getCallReadRegisters());
 		   //(abi->getReturnReadRegisters()));
       ret.written |= (abi->getCallWrittenRegisters());
     }
