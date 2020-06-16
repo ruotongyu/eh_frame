@@ -109,9 +109,11 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 				if (known_func.count(func_addr) || nops_inst.count(func_addr)){
 					continue;
 				}
+
 				if (!CallingConvensionCheck(r_f)) {
 					continue;	
 				}
+
 				//uint64_t func_end = (uint64_t) r_f->addr();
 				//pbFunc->set_va(r_f->addr());
 				int inst_num = 0;

@@ -29,7 +29,7 @@
  */
 
 // $Id: liveness.C,v 1.12 2008/09/04 21:06:20 bill Exp $
-
+//
 #include "CFG.h"
 #include "Location.h"
 #include "InstructionDecoder.h"
@@ -39,6 +39,8 @@
 #include "livenessAnaEhframe.h"
 #include "ABI.h"
 #include <boost/bind.hpp>
+
+extern bool isNopInsn(Instruction insn);
 
 #define DEBUG_LIVENESS 0
 std::string regs1 = " ttttttttddddddddcccccccmxxxxxxxxxxxxxxxxgf                  rrrrrrrrrrrrrrrrr";
@@ -439,7 +441,6 @@ void getReadSet(const Instruction& curInsn, std::set<InstructionAST::Ptr>& read_
 
 ReadWriteInfo LivenessAnalyzer::calcRWSets(Instruction curInsn, Block *blk, Address a)
 {
-
   liveness_cerr << "calcRWSets for " << curInsn.format() << " @ " << hex << a << dec << endl;
   ReadWriteInfo ret;
   set<InstructionAST::Ptr> read_set;
@@ -451,10 +452,16 @@ ReadWriteInfo LivenessAnalyzer::calcRWSets(Instruction curInsn, Block *blk, Addr
   bool xor_op = false;
   bool pure_registers = true;
 
+
   ret.read = abi->getBitArray();
   ret.written = abi->getBitArray();
   ret.insnSize = curInsn.size();
+
+  if (isNopInsn(curInsn))
+   return ret;
+
   std::set<RegisterAST::Ptr> cur_read, cur_written;
+
   curInsn.getReadSet(cur_read);
   curInsn.getWriteSet(cur_written);
 
