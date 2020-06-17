@@ -313,6 +313,7 @@ bool isNopInsn(Instruction insn) {
 	if(insn.getOperation().getID() == e_nop){
 		return true;
 	}
+	/* too aggressive. comment it out
 	if(insn.getOperation().getID() == e_lea){
 		set<Expression::Ptr> memReadAddr;
 		insn.getMemoryReadOperands(memReadAddr);
@@ -330,7 +331,7 @@ bool isNopInsn(Instruction insn) {
 		if (visitor.isNop) {
 			return true;
 		}
-	}
+	}*/
 	return false;
 }
 
