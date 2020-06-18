@@ -132,6 +132,39 @@ void PrintFuncResult(int raw_eh_num, int reu_eh_num, int gt_num) {
 	cout << "Number of Missing Functions from Recursive Disassemble EHFrame: " << dec << reu_eh_num << endl;
 }
 
+bool InvalidBB(ParseAPI::Block* block){
+
+    ParseAPI::Block::Insns instructions;
+    block->getInsns(instructions);
+    const unsigned char* buffer_beg;
+    Address last_inst = 0x0;
+
+    // does not contain instructions
+    if (instructions.begin() == instructions.end()){
+	return true;
+    } else {
+	last_inst = instructions.rbegin()->first;
+    }
+
+
+
+    // not equal? check if it is caused by decoding error
+    if (last_inst != block->last()){
+	buffer_beg = (const unsigned char *)
+	    (block->obj()->cs()->getPtrToInstruction(block->last()));
+	InstructionDecoder dec = InstructionDecoder(
+		buffer_beg, InstructionDecoder::maxInstructionLength, block->region()->getArch());
+
+	auto bad_inst = dec.decode();
+
+	if (!bad_inst.isLegalInsn()){
+	    return true;
+	}
+    }
+
+    return false;
+}
+
 void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj) {
 	set<Address> seen;
 	cout << "<<<<<<<<<<<<<<<Debug Result >>>>>>>>>>>>>>>>>" << endl;
@@ -145,11 +178,13 @@ void DebugDisassemble(Dyninst::ParseAPI::CodeObject &codeobj) {
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			uint64_t cur_addr = block->start();
+
+			if (InvalidBB(block)){
+			    cout << "Invalid inst: " << hex << block->last() << endl;
+			}
+
 			for (auto it: instructions){
 				Dyninst::InstructionAPI::Instruction inst = it.second;
-				if (!inst.isLegalInsn() || !inst.isValid()) {
-					cout << "Invalid Instruction: " << hex << cur_addr << endl;
-				}
 				cout << "Inst: 0x" << hex << cur_addr << " " << inst.format() << endl; 
 				cur_addr += inst.size();
 			}

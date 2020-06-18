@@ -59,17 +59,16 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 					}
 				}
 			}
+			if (InvalidBB(block)){
+#ifdef DEBUG_DISASSEMBLE
+				cout << "Invalid instruction " << hex << block->last() << endl;
+#endif
+				return false;
+			}
 			// go through all instructions
 			for (auto it: instructions) {
 				Dyninst::InstructionAPI::Instruction inst = it.second;
-				//Check inlegall instruction
-				if (!inst.isLegalInsn() || !inst.isValid()){
-					//cout << "Invalid Instruction: " << cur_addr << endl;
-					return false;
-				}
-				//if (cur_addr >= 7086240 and cur_addr <= 7086340){
-				//}
-				//Check conflict instructions
+
 				if (invalid_inst.count(cur_addr)){
 					return false;
 				}
@@ -84,7 +83,6 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 	}
 	return true;
 }
-
 void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule, set<uint64_t> &nops_inst, map<uint64_t, uint64_t> DataRef, map<uint64_t, uint64_t> CodeRef, set<uint64_t> &invalid_inst) {
 	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;

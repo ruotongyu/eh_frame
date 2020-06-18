@@ -9,6 +9,8 @@ using namespace Dyninst::ParseAPI;
 
 void FilterNotInCode(set<uint64_t> &identified, vector<SymtabAPI::Region *> regs);
 
+bool InvalidBB(ParseAPI::Block*);
+
 bool CallingConvensionCheck(ParseAPI::Function* f);
 void PrintFuncResult(int raw_eh_num, int reu_eh_num, int gt_num);
 
