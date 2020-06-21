@@ -5,6 +5,7 @@
 #include "libdwarf.h"
 #include <stdint.h>
 #include <map>
+#include <set>
 
 class FrameData{
     private:
@@ -30,16 +31,16 @@ class FrameData{
 	    return false;
 	}
 
-	bool operator== (const FrameData& r_hs) {
-	    return _lowpc == r_hs.getPC();
+	bool operator== (FrameData& r_hs) {
+	    return _lowpc == r_hs.get_pc();
 	}
 
-	bool operator< (const FrameData& r_hs) {
-	    return _lowpc < r_hs.getPC();
+	bool operator< (FrameData& r_hs) {
+	    return _lowpc < r_hs.get_pc();
 	}
 
-	bool operator> (const FrameData& r_hs) {
-	    return _lowpc > r_hs.getPC();
+	bool operator> (FrameData& r_hs) {
+	    return _lowpc > r_hs.get_pc();
 	}
 
 	std::map<uint64_t, int32_t>* get_frame_pointers(){
@@ -59,11 +60,11 @@ class FrameParser{
     private:
 	std::set<FrameData> frames;
 
-	int _address_size;
+	short unsigned int _address_size;
 
-	void iter_frame(Dwarf_Debug, const char*);
+	bool iter_frame(Dwarf_Debug);
 
-	bool parse_fde(Dwarf_Cie, Dwarf_Error*);
+	bool parse_fde(Dwarf_Debug, Dwarf_Fde, Dwarf_Error*);
 
 	bool check_cfa_def(Dwarf_Frame_Op*, Dwarf_Signed);
     

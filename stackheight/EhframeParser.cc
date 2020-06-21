@@ -1,5 +1,6 @@
 #include <fcntl.h>
-#include <stdio.h>
+#include <unistd.h>
+#include <iostream>
 
 #include "EhframeParser.h"
 
@@ -15,15 +16,16 @@ using namespace std;
 FrameParser::FrameParser(const char* f_path){
     int fd = -1;
     int res = DW_DLV_ERROR;
+    int regtabrulecount = 0;
     Dwarf_Error error;
-    Dwarf_Handler errhand  0;
+    Dwarf_Handler errhand = 0;
     Dwarf_Ptr errarg = 0;
     Dwarf_Debug dbg = 0;
 
-    fd = open(f_path, O_RDONLY | O_BINARY);
+    fd = open(f_path, O_RDONLY);
 
     if (fd < 0){
-	cerr << "Can't open the file " << f_path << endl; 
+        std::cerr << "Can't open the file " << f_path << endl; 
 	exit(-1);
     }
 
@@ -36,6 +38,7 @@ FrameParser::FrameParser(const char* f_path){
 	if (res == DW_DLV_ERROR){
 	    cerr << "Error code " << dwarf_errmsg(error) << endl;
 	}
+
 	exit(-1);
     }
 
@@ -54,7 +57,7 @@ FrameParser::FrameParser(const char* f_path){
      * In dwarfdump we get the SAME_VAL, UNDEF_VAL,
      * INITIAL_VAL CFA_VAL from dwconf_s struct.
      * */
-    rettabrulecount = 1999;
+    regtabrulecount = 1999;
     dwarf_set_frame_undefined_value(dbg, UNDEF_VAL);
     dwarf_set_frame_rule_initial_value(dbg, INITIAL_VAL);
     dwarf_set_frame_same_value(dbg, SAME_VAL);
@@ -62,7 +65,7 @@ FrameParser::FrameParser(const char* f_path){
     dwarf_set_frame_rule_table_size(dbg, regtabrulecount);
     dwarf_get_address_size(dbg, &_address_size, &error);
 
-    if (!iter_over_frame(dbg, ".eh_frame")){
+    if (!iter_frame(dbg)){
 	cerr << "Can't parse eh_frame correctly!" << endl;
     }
 
@@ -80,9 +83,9 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
     Dwarf_Addr idx_i = 0;
     Dwarf_Unsigned func_length = 0;
     Dwarf_Ptr fde_bytes;
-    Dwarf_unsigned fde_byte_length = 0;
+    Dwarf_Unsigned fde_bytes_length = 0;
     Dwarf_Off cie_offset = 0;
-    Dwarf_signed cie_index = 0;
+    Dwarf_Signed cie_index = 0;
     Dwarf_Off fde_offset = 0;
     Dwarf_Addr arbitrary_addr = 0;
     Dwarf_Addr actual_pc = 0;
@@ -96,7 +99,7 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
     Dwarf_Cie cie = 0;
 
     res = dwarf_get_fde_range(fde, &lowpc, &func_length, &fde_bytes,
-	    &fde_byte_length, &cie_offset, &cie_index, &fde_offset, error);
+	    &fde_bytes_length, &cie_offset, &cie_index, &fde_offset, error);
 
 #ifdef DWARF_DEBUG
     cerr << " FDE: " << hex << lowpc << " -> " << lowpc + func_length << endl; 
@@ -116,7 +119,7 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
 	return false;
     }
 
-    res = dwarf_get_cide_of_fde(fde, &cie, error);
+    res = dwarf_get_cie_of_fde(fde, &cie, error);
 
     if (res != DW_DLV_OK){
 	cerr << "Error getting cie from fde" << endl;
@@ -182,7 +185,7 @@ bool FrameParser::iter_frame(Dwarf_Debug dbg){
     Dwarf_Cie *cie_data = 0;
     Dwarf_Fde *fde_data = 0;
     int res = DW_DLV_ERROR;
-    Dwarf_signed fdenum = 0;
+    Dwarf_Signed fdenum = 0;
 
     res = dwarf_get_fde_list_eh(dbg, &cie_data, &cie_element_count,
 	    &fde_data, &fde_element_count, &error);
@@ -198,14 +201,14 @@ bool FrameParser::iter_frame(Dwarf_Debug dbg){
     }
 
 #ifdef DWARF_DEBUG
-    cerr << cie_element_count << " cies present. " << 
+    cerr << cie_element_count << " cies present. "
 	<< fde_element_count << " fdes present. \n" << endl;
 #endif
 
     for (fdenum = 0; fdenum < fde_element_count; ++fdenum){
 	Dwarf_Cie cie = 0;
 
-	res = dwarf_get_cie_of_fde(fde_data[fdenum], &cie, &cerror);
+	res = dwarf_get_cie_of_fde(fde_data[fdenum], &cie, &error);
 
 	if (res != DW_DLV_OK) {
 	    cerr << "Error accessing cie of fdenum " << fdenum 
