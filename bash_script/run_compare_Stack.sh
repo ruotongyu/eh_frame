@@ -56,7 +56,6 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   #echo "current to be handled file is $file"
   replace_tmp1=${file//strip_/}
   binary_file=${replace_tmp1//\.strip/}
-
   dir_name=`dirname $binary_file`
   tmp1=$(echo "$dir_name" | cut -d'_' -f 1)
   tmp2=${tmp1}_strip
@@ -65,13 +64,7 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   if [ $base_name = "libc-2.27.so" ]; then
 	  continue
   fi
-  ehname=${sdir}/Block-dyninstBB_ehframe-${base_name}.strip.pb
-  gtBlock_file=${dir_name}/gtBlock_${base_name}.pb
-  ref=${dir_name}/gtRef_${base_name}.pb
-  ehRes_file=${dir_name}/ehRes_${base_name}.pb
-  ehframe=${dir_name}/ehRes_${base_name}.pb
-  #gtBlock_file=${replace_tmp//Block-$PREFIX-/gtBlock_}
-  
+  output=${sdir}/Block-angrBB_Stack-${base_name}.pb
   optimized_dir=`echo $file | rev | cut -d '/' -f2 | rev`
   #echo "optimized dir is $optimized_dir"
   #echo "groundtruth file is $gtBlock_file"
@@ -89,7 +82,6 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
 
 
   pure_binary_file=`basename $binary_file`
-  output_path="$OUTPUT/data@testsuite@$last_dir$utils_dir@$optimized_dir@$pure_binary_file"
   #echo "output path is $output_path"
 
   if [ ! -f $binary_file ]; then
@@ -97,13 +89,9 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
     continue
   fi
 
-  if [ -f $output_path -a $NEW -eq 0 ]; then
-    echo "already compare it!, skip!"
-    continue
-  fi
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
   echo "[Handle File]: $binary_file"
-  #echo "timeout 1h python3 $TOOL -g $gtBlock_file -i $ehRes_file -b $binary_file -e $ehname -r $ref"
-  timeout 1h python3 $TOOL -g $gtBlock_file -i $ehRes_file -b $binary_file -e $ehname -r $ref
+  echo "python3 $TOOL -b $binary_file -o $output"
+  #timeout 1h python3 $TOOL -b $binary_file -o $output
 done
