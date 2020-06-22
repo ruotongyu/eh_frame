@@ -61,12 +61,17 @@ class FrameParser{
 	std::set<FrameData> frames;
 
 	short unsigned int _address_size;
+	short unsigned int get_stack_pointer_id();
 
 	bool iter_frame(Dwarf_Debug);
 
 	bool parse_fde(Dwarf_Debug, Dwarf_Fde, Dwarf_Error*);
 
 	bool check_cfa_def(Dwarf_Frame_Op*, Dwarf_Signed);
+
+	bool get_stack_height(Dwarf_Debug, Dwarf_Fde, Dwarf_Addr, Dwarf_Error*, signed&);
+
+	bool print_one_regentry(struct Dwarf_Regtable_Entry3_s*);
     
     public:
 	FrameParser(const char* f_path);

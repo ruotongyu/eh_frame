@@ -65,6 +65,11 @@ FrameParser::FrameParser(const char* f_path){
     dwarf_set_frame_rule_table_size(dbg, regtabrulecount);
     dwarf_get_address_size(dbg, &_address_size, &error);
 
+    if (_address_size != 32 && _address_size != 64){
+	cerr << "Un-supported architecture " << _address_size << endl;
+	exit(-1);
+    }
+
     if (!iter_frame(dbg)){
 	cerr << "Can't parse eh_frame correctly!" << endl;
     }
@@ -76,6 +81,104 @@ FrameParser::FrameParser(const char* f_path){
 
     close(fd);
 }
+
+bool FrameParser::get_stack_height(Dwarf_Debug dbg, Dwarf_Fde fde, 
+	Dwarf_Addr cur_addr, Dwarf_Error* error, signed& height){
+    int res;
+    Dwarf_Addr lowpc = 0;
+    Dwarf_Unsigned func_length = 0;
+    Dwarf_Regtable3 tab3;
+    Dwarf_Unsigned fde_byte_length = 0;
+    Dwarf_Signed cie_index = 0;
+    Dwarf_Off cie_offset = 0;
+    Dwarf_Off fde_offset = 0;
+    Dwarf_Ptr fde_bytes;
+    Dwarf_Half sp_reg = 0;
+    Dwarf_Addr actual_pc = 0;
+    struct Dwarf_Regtable_Entry3_s* cfa_entry = 0;
+    struct Dwarf_Regtable_Entry3_s* sp_entry = 0;
+
+    int oldrulecount = 0;
+
+    res = dwarf_get_fde_range(fde, &lowpc, &func_length, &fde_bytes,
+	    &fde_byte_length, &cie_offset, &cie_index, &fde_offset, error);
+
+    if (res != DW_DLV_OK){
+	cerr << "Problem getting fde range \n" << endl;
+	return false;
+    }
+
+    if (cur_addr >= (lowpc + func_length) && cur_addr < lowpc){
+	cerr << hex << cur_addr << " does not in current fde!";
+	return false;
+    }	
+
+    /*
+     * 1 is arbitrary. we are winding up getting the rule
+     * count here while leaving things unchanged. */
+    oldrulecount = dwarf_set_frame_rule_table_size(dbg, 1);
+    dwarf_set_frame_rule_table_size(dbg, oldrulecount);
+
+    tab3.rt3_reg_table_size = oldrulecount;
+    tab3.rt3_rules = (struct Dwarf_Regtable_Entry3_s *) malloc (
+	    sizeof(struct Dwarf_Regtable_Entry3_s) * oldrulecount);
+
+    if (!tab3.rt3_rules){
+	cerr << "unable to malloc for " << oldrulecount << " rules" << endl;
+	return false;
+    }
+
+    res = dwarf_get_fde_info_for_all_regs3(fde, cur_addr, &tab3, &actual_pc, error);
+
+    sp_reg = get_stack_pointer_id();
+
+    if (res != DW_DLV_OK){
+	cerr << "dwarf_get_fde_info_for_all_regs3 failed" << endl;
+	return false;
+    }
+    
+    if (sp_reg >= tab3.rt3_reg_table_size){
+	cerr << "sp(" << sp_reg << ") is bigger than rt3_reg_table_size " 
+	    << tab3.rt3_reg_table_size << endl;
+	return false;
+    }
+    cfa_entry = &tab3.rt3_cfa_rule;
+    print_one_regentry(cfa_entry);
+}
+
+bool FrameParser::print_one_regentry(struct Dwarf_Regtable_Entry3_s *entry){
+    Dwarf_Unsigned offset = 0xffffffff;
+    Dwarf_Half reg = 0xffff;
+#ifdef DWARF_DEBUG
+    cout << "type: " << entry->dw_value_type << " " <<
+	((entry->dw_value_type == DW_EXPR_OFFSET) ? "DW_EXPR_OFFST" :
+	(entry->dw_value_type == DW_EXPR_VAL_OFFSET) ? "DW_EXPR_VAL_OFFSET" : 
+	(entry->dw_value_type == DW_EXPR_EXPRESSION) ? "DW_EXPR_EXPRESSION" :
+	(entry->dw_value_type == DW_EXPR_VAL_EXPRESSION) ? "DW_EXPR_VAL_EXPRESSION" : "Unknown") << endl;
+#endif
+    switch(entry->dw_value_type) {
+	case DW_EXPR_OFFSET:
+	    reg = entry->dw_regnum;
+	    if (entry->dw_offset_relevant){
+		offset = entry->dw_offset_or_block_len;
+	    }
+	    break;
+	default:
+	    cerr << "Can't handle the type " << entry->dw_value_type << " of cfa definition!" << endl;
+	    break;
+    }
+
+    if (offset == 0xffffffff || reg == 0xffff){
+	cerr << "Can't get the register or offset!" << endl;
+	return false;
+    }
+
+    if (reg != get_stack_pointer_id()){
+	cerr << "Wired. CFA is not defined based on stack pointer register(rsp/esp)" << endl;
+	return false;
+    }
+}
+
 
 bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
     int res;
@@ -145,6 +248,13 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
 
     dwarf_dealloc(dbg, frame_op_array, DW_DLA_FRAME_BLOCK);
     return true;
+}
+
+short unsigned int FrameParser::get_stack_pointer_id(){
+    if (_address_size == 32)
+	return 4;
+    else
+	return 7;
 }
 
 bool FrameParser::check_cfa_def(Dwarf_Frame_Op* frame_op_array, Dwarf_Signed frame_op_count){
