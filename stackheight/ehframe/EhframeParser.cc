@@ -20,7 +20,7 @@ FrameParser::FrameParser(const char* f_path){
     Dwarf_Error error;
     Dwarf_Handler errhand = 0;
     Dwarf_Ptr errarg = 0;
-    Dwarf_Debug dbg = 0;
+    //Dwarf_Debug dbg = 0;
 
     fd = open(f_path, O_RDONLY);
 
@@ -30,7 +30,7 @@ FrameParser::FrameParser(const char* f_path){
     }
 
     res = dwarf_init_b(fd, DW_DLC_READ, DW_GROUPNUMBER_ANY,
-	    errhand, errarg, &dbg, &error);
+	    errhand, errarg, &_dbg, &error);
 
     if (res != DW_DLV_OK){
 	cerr << "Parse dwarf error!" << endl;
@@ -58,25 +58,20 @@ FrameParser::FrameParser(const char* f_path){
      * INITIAL_VAL CFA_VAL from dwconf_s struct.
      * */
     regtabrulecount = 1999;
-    dwarf_set_frame_undefined_value(dbg, UNDEF_VAL);
-    dwarf_set_frame_rule_initial_value(dbg, INITIAL_VAL);
-    dwarf_set_frame_same_value(dbg, SAME_VAL);
-    dwarf_set_frame_cfa_value(dbg, CFA_VAL);
-    dwarf_set_frame_rule_table_size(dbg, regtabrulecount);
-    dwarf_get_address_size(dbg, &_address_size, &error);
+    dwarf_set_frame_undefined_value(_dbg, UNDEF_VAL);
+    dwarf_set_frame_rule_initial_value(_dbg, INITIAL_VAL);
+    dwarf_set_frame_same_value(_dbg, SAME_VAL);
+    dwarf_set_frame_cfa_value(_dbg, CFA_VAL);
+    dwarf_set_frame_rule_table_size(_dbg, regtabrulecount);
+    dwarf_get_address_size(_dbg, &_address_size, &error);
 
     if (_address_size != 32 && _address_size != 64){
 	cerr << "Un-supported architecture " << _address_size << endl;
 	exit(-1);
     }
 
-    if (!iter_frame(dbg)){
+    if (!iter_frame(_dbg)){
 	cerr << "Can't parse eh_frame correctly!" << endl;
-    }
-
-    res = dwarf_finish(dbg, &error);
-    if (res != DW_DLV_OK){
-	cerr << "dwarf_finish failed\n" << endl;
     }
 
     close(fd);
@@ -143,10 +138,10 @@ bool FrameParser::get_stack_height(Dwarf_Debug dbg, Dwarf_Fde fde,
 	return false;
     }
     cfa_entry = &tab3.rt3_cfa_rule;
-    print_one_regentry(cfa_entry);
+    parse_one_regentry(cfa_entry, height);
 }
 
-bool FrameParser::print_one_regentry(struct Dwarf_Regtable_Entry3_s *entry){
+bool FrameParser::parse_one_regentry(struct Dwarf_Regtable_Entry3_s *entry, signed& height){
     Dwarf_Unsigned offset = 0xffffffff;
     Dwarf_Half reg = 0xffff;
 #ifdef DWARF_DEBUG
@@ -177,10 +172,13 @@ bool FrameParser::print_one_regentry(struct Dwarf_Regtable_Entry3_s *entry){
 	cerr << "Wired. CFA is not defined based on stack pointer register(rsp/esp)" << endl;
 	return false;
     }
+    
+    height = offset;
+    return true;
 }
 
 
-bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
+bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Signed fde_num, Dwarf_Error* error){
     int res;
     Dwarf_Addr lowpc = 0;
     Dwarf_Addr idx_i = 0;
@@ -200,6 +198,8 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
     Dwarf_Frame_Op* frame_op_array = 0;
     Dwarf_Signed frame_op_count = 0;
     Dwarf_Cie cie = 0;
+
+    bool is_sp_based = false;
 
     res = dwarf_get_fde_range(fde, &lowpc, &func_length, &fde_bytes,
 	    &fde_bytes_length, &cie_offset, &cie_index, &fde_offset, error);
@@ -238,16 +238,47 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
     }
 
     // iter over every instruction, to check every definition of cfas
-    if (!check_cfa_def(frame_op_array, frame_op_count)){
+    is_sp_based = check_cfa_def(frame_op_array, frame_op_count);
+    if (!is_sp_based){
 
 #ifdef DWARF_DEBUG
 	cerr << "In func " << hex << lowpc <<  ", the definion of cfa is not defined by rsp/esp!" << endl; 
 #endif
 
     }
+    frames.insert(FrameData(lowpc, is_sp_based, func_length, fde_num));
 
     dwarf_dealloc(dbg, frame_op_array, DW_DLA_FRAME_BLOCK);
     return true;
+}
+
+signed FrameParser::request_stack_height(uint64_t cur_addr, signed &height){
+    // check if current address is in the range of eh_frame
+    FrameData* cur_frame = nullptr;
+    Dwarf_Error error;
+    for (auto frame: frames){
+	if (frame.in_range(cur_addr)){
+	    cur_frame = &frame;
+	    break;
+	}
+
+	// can't find a proper frame
+	if (cur_addr < frame.get_pc()){
+	    break;
+	}
+    }
+    if (!cur_frame)
+	return HEIGHT_ERROR_CANT_FIND;
+
+    if (!cur_frame->get_cfa_offset_sp())
+	return HEIGHT_ERROR_NOT_BASED_ON_SP;
+
+    // ok. get the stack height
+    if (!get_stack_height(_dbg, _fde_data[cur_frame->get_fde_num()], cur_addr, &error, height)){
+	return HEIGHT_ERROR;
+    }
+    return 0;
+
 }
 
 short unsigned int FrameParser::get_stack_pointer_id(){
@@ -289,16 +320,12 @@ bool FrameParser::check_cfa_def(Dwarf_Frame_Op* frame_op_array, Dwarf_Signed fra
 
 bool FrameParser::iter_frame(Dwarf_Debug dbg){
     Dwarf_Error error;
-    Dwarf_Signed cie_element_count = 0;
-    Dwarf_Signed fde_element_count = 0;
 
-    Dwarf_Cie *cie_data = 0;
-    Dwarf_Fde *fde_data = 0;
     int res = DW_DLV_ERROR;
     Dwarf_Signed fdenum = 0;
 
-    res = dwarf_get_fde_list_eh(dbg, &cie_data, &cie_element_count,
-	    &fde_data, &fde_element_count, &error);
+    res = dwarf_get_fde_list_eh(dbg, &_cie_data, &_cie_element_count,
+	    &_fde_data, &_fde_element_count, &error);
 
     if (res == DW_DLV_NO_ENTRY){
 	cerr << "No .eh_frame section!" << endl;
@@ -311,14 +338,14 @@ bool FrameParser::iter_frame(Dwarf_Debug dbg){
     }
 
 #ifdef DWARF_DEBUG
-    cerr << cie_element_count << " cies present. "
-	<< fde_element_count << " fdes present. \n" << endl;
+    cerr << _cie_element_count << " cies present. "
+	<< _fde_element_count << " fdes present. \n" << endl;
 #endif
 
-    for (fdenum = 0; fdenum < fde_element_count; ++fdenum){
+    for (fdenum = 0; fdenum < _fde_element_count; ++fdenum){
 	Dwarf_Cie cie = 0;
 
-	res = dwarf_get_cie_of_fde(fde_data[fdenum], &cie, &error);
+	res = dwarf_get_cie_of_fde(_fde_data[fdenum], &cie, &error);
 
 	if (res != DW_DLV_OK) {
 	    cerr << "Error accessing cie of fdenum " << fdenum 
@@ -328,16 +355,28 @@ bool FrameParser::iter_frame(Dwarf_Debug dbg){
 
 #ifdef DWARF_DEBUG
     cerr << " Print cie of fde " << fdenum << endl;
+#endif
 
     // parse every fde
-    parse_fde(dbg, fde_data[fdenum], &error);
+    parse_fde(dbg, _fde_data[fdenum], fdenum, &error);
 
+#ifdef DWARF_DEBUG
     cerr << " Print fde " << fdenum << endl;
 #endif
 
     }
 
-    dwarf_fde_cie_list_dealloc(dbg, cie_data, cie_element_count,
-	    fde_data, fde_element_count);
     return true;
+}
+
+FrameParser::~FrameParser(){
+    Dwarf_Error error;
+    dwarf_fde_cie_list_dealloc(_dbg, _cie_data, _cie_element_count,
+	    _fde_data, _fde_element_count);
+
+    auto res = dwarf_finish(_dbg, &error);
+    if (res != DW_DLV_OK){
+	cerr << "dwarf_finish failed\n" << endl;
+    }
+
 }
