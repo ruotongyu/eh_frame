@@ -22,6 +22,9 @@
 #include "utils.h"
 #include "loadInfo.h"
 
+// header of stackheight parser
+#include "stackheight/ehframe/EhframeParser.h"
+
 using namespace Dyninst;
 using namespace SymtabAPI;
 using namespace std;
@@ -50,14 +53,13 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 			//Check control flow graph
 			for (auto succ: block->targets()){
 				unsigned succ_addr = succ->trg()->start();
-				if (succ_addr == 4294967295){
-					continue;
-				}
+
 				if (!all_instructions.count(succ_addr)){
 					if (!isInGaps(gap_regions, succ_addr)){
 						return false;
 					}
 				}
+
 			}
 			if (InvalidBB(block)){
 #ifdef DEBUG_DISASSEMBLE
@@ -187,6 +189,39 @@ void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64
 			//pc_funcs[(uint64_t) func->addr()] = end_addr;
 		}
 	}
+}
+
+// for debug
+void dumpStackHeight(ParseAPI::CodeObject* code_obj, const char* file_name){
+    FrameParser fp(file_name);
+    std::set<Dyninst::Address> seen;
+    signed height;
+    signed height_ret;
+
+    for (auto func: code_obj->funcs()){
+
+	if (seen.count(func->addr()))
+	    continue;
+
+	seen.insert(func->addr());
+
+	for (auto block: func->blocks()){
+	    ParseAPI::Block::Insns instructions;
+	    block->getInsns(instructions);
+	    for(auto inst: instructions){
+		height_ret = fp.request_stack_height(inst.first, height);
+		if (height_ret == HEIGHT_ERROR_CANT_FIND){
+		    cerr << "Can't find the address " << hex << inst.first << " in ehframe" << endl;
+		} else if (height_ret == HEIGHT_ERROR_NOT_BASED_ON_SP){
+		    cerr << "CFA is not based on SP registers at " << hex << inst.first << "'s parent function " << func->addr()  << endl;
+		} else if (height_ret){
+		    cerr << "unknown error occurs when dumping stack height at " << inst.first << endl;
+		} else {
+		    cout << "Height at " << hex << inst.first << " is " << dec << height << endl; 
+		}
+	    }
+	}
+    }
 }
 
 set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map, blocks::module &pbModule, set<uint64_t> &nops_inst, set<uint64_t> &invalid_inst){
@@ -414,6 +449,9 @@ int main(int argc, char** argv){
 	blocks::module pbModule;
 	set<uint64_t> invalid_inst;
 	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map, pbModule, nops_inst, invalid_inst);
+
+	//dumpStackHeight(code_obj_eh.get(), input_string);
+
 #ifdef DEBUG_BASICBLOCK	
 	printMap(bb_map);
 	exit(1);

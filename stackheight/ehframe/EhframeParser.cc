@@ -4,7 +4,7 @@
 
 #include "EhframeParser.h"
 
-#define DWARF_DEBUG
+//#define DWARF_DEBUG
 
 #define UNDEF_VAL 2000
 #define SAME_VAL 2001
@@ -65,7 +65,7 @@ FrameParser::FrameParser(const char* f_path){
     dwarf_set_frame_rule_table_size(_dbg, regtabrulecount);
     dwarf_get_address_size(_dbg, &_address_size, &error);
 
-    if (_address_size != 32 && _address_size != 64){
+    if (_address_size != 4 && _address_size != 8){
 	cerr << "Un-supported architecture " << _address_size << endl;
 	exit(-1);
     }
@@ -145,7 +145,7 @@ bool FrameParser::parse_one_regentry(struct Dwarf_Regtable_Entry3_s *entry, sign
     Dwarf_Unsigned offset = 0xffffffff;
     Dwarf_Half reg = 0xffff;
 #ifdef DWARF_DEBUG
-    cout << "type: " << entry->dw_value_type << " " <<
+    cout << "type: " << " " <<
 	((entry->dw_value_type == DW_EXPR_OFFSET) ? "DW_EXPR_OFFST" :
 	(entry->dw_value_type == DW_EXPR_VAL_OFFSET) ? "DW_EXPR_VAL_OFFSET" : 
 	(entry->dw_value_type == DW_EXPR_EXPRESSION) ? "DW_EXPR_EXPRESSION" :
@@ -244,7 +244,6 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Signed fde_num
 #ifdef DWARF_DEBUG
 	cerr << "In func " << hex << lowpc <<  ", the definion of cfa is not defined by rsp/esp!" << endl; 
 #endif
-
     }
     frames.insert(FrameData(lowpc, is_sp_based, func_length, fde_num));
 
@@ -277,12 +276,13 @@ signed FrameParser::request_stack_height(uint64_t cur_addr, signed &height){
     if (!get_stack_height(_dbg, _fde_data[cur_frame->get_fde_num()], cur_addr, &error, height)){
 	return HEIGHT_ERROR;
     }
+
     return 0;
 
 }
 
 short unsigned int FrameParser::get_stack_pointer_id(){
-    if (_address_size == 32)
+    if (_address_size == 4)
 	return 4;
     else
 	return 7;
@@ -302,10 +302,14 @@ bool FrameParser::check_cfa_def(Dwarf_Frame_Op* frame_op_array, Dwarf_Signed fra
 	    case DW_CFA_def_cfa_register:
 		// TODO. check if the regiseter is rsp/esp
 		//fo->fp_register
-		if (_address_size == 64){
-		    res = (fo->fp_register != 7) ? false : true;
+		if (_address_size == 8){
+		    if (fo->fp_register != 7){
+			res = false;
+		    }
 		} else {
-		    res = (fo->fp_register != 4) ? false : true;
+		    if (fo->fp_register != 4){
+			res = false;
+		    }
 		}
 		break;
 	    

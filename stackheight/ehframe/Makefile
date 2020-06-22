@@ -1,13 +1,17 @@
 CXX=g++
-CXXFLAGS=-g -O2
-
 CXXFLAGS= -O2 -std=c++11
-LDFLAGS= -L/usr/local/lib -lparseAPI -linstructionAPI -lsymtabAPI -ldyninstAPI -lcommon -lglog -lgflags -lprotobuf -lboost_system -lpthread
+LDFLAGS= -L/usr/local/lib -ldwarf -lprotobuf -lglog -lgflags -lpthread 
 
-all: EhframeParser.o
 
-EhframeParser.o: EhframeParser.cc
-	$(CXX) -c $(CXXFLAGS) -o $@ $^ 
+all: EhStackHeight 
 
+stackheight.pb.cc: ../proto/stackheight.proto ../../blocks.proto
+	protoc --cpp_out=. --proto_path=../proto stackheight.proto
+
+blocks.pb.cc: ../../blocks.proto
+	protoc --cpp_out=. --proto_path=../../ blocks.proto
+
+EhStackHeight: EhStackHeight.cc EhframeParser.cc stackheight.pb.cc blocks.pb.cc
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 clean:
-	rm *.o 
+	rm EhStackHeight blocks.pb.* stackheight.pb.*
