@@ -60,6 +60,7 @@ FrameParser::FrameParser(const char* f_path){
     dwarf_set_frame_same_value(dbg, SAME_VAL);
     dwarf_set_frame_cfa_value(dbg, CFA_VAL);
     dwarf_set_frame_rule_table_size(dbg, regtabrulecount);
+    dwarf_get_address_size(dbg, &_address_size, &error);
 
     if (!iter_over_frame(dbg, ".eh_frame")){
 	cerr << "Can't parse eh_frame correctly!" << endl;
@@ -146,9 +147,31 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Error* error){
 bool FrameParser::check_cfa_def(Dwarf_Frame_Op* frame_op_array, Dwarf_Signed frame_op_count){
     Dwarf_Signed i = 0;
 
+    bool res = true;
+
     for (i; i < frame_op_count; ++i){
 	Dwarf_Frame_Op *fo = frame_op_array + i;
+	switch (fo->fp_extended_op){
+
+	    case DW_CFA_def_cfa:
+	    case DW_CFA_def_cfa_sf:
+	    case DW_CFA_def_cfa_register:
+		// TODO. check if the regiseter is rsp/esp
+		//fo->fp_register
+		if (_address_size == 64){
+		    res = (fo->fp_register != 7) ? false : true;
+		} else {
+		    res = (fo->fp_register != 4) ? false : true;
+		}
+		break;
+	    
+	    // TODO. Handle it. can't handle this now.
+	    case DW_CFA_def_cfa_expression:
+		res = false;
+		break;
+	}
     }
+    return res;
 }
 
 bool FrameParser::iter_frame(Dwarf_Debug dbg){

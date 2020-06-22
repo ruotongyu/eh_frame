@@ -59,6 +59,8 @@ class FrameParser{
     private:
 	std::set<FrameData> frames;
 
+	int _address_size;
+
 	void iter_frame(Dwarf_Debug, const char*);
 
 	bool parse_fde(Dwarf_Cie, Dwarf_Error*);
