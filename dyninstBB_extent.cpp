@@ -121,12 +121,12 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();
-				blocks::Function* pbFunc = pbModule.add_fuc();
+
 				if (known_func.count(func_addr) || nops_inst.count(func_addr)){
 					continue;
 				}
 
-
+				blocks::Function* pbFunc = pbModule.add_fuc();
 				//uint64_t func_end = (uint64_t) r_f->addr();
 				//pbFunc->set_va(r_f->addr());
 				int inst_num = 0;
