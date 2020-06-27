@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "compareStack.py", line 19, in <module>
+    import stackheight_pb2
+ModuleNotFoundError: No module named 'stackheight_pb2'
+Traceback (most recent call last):
+  File "compareStack.py", line 19, in <module>
+    import stackheight_pb2
+ModuleNotFoundError: No module named 'stackheight_pb2'
