@@ -133,13 +133,14 @@ void StackHeight(stackheight::StackHeights& sh_proto, Dyninst::ParseAPI::Functio
 		//height_num = 
 		ss << height;
 		ss >> height_num;
+		height_num = height_num * -1;
 		ss.clear();
 	    }
 	    auto cur_height = sh_proto.add_heights();
 	    cur_height->set_address(addr);
 	    cur_height->set_height(height_num);
 #ifdef STACK_ANALYSIS_DEBUG
-	    DLOG(INFO) << loc.format().c_str() << " := " << height.format().c_str() << std::endl;
+	    DLOG(INFO) << loc.format().c_str() << " := " << height_num << std::endl;
 #endif
 	}
       }

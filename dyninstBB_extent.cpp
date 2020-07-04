@@ -55,7 +55,7 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 				unsigned succ_addr = succ->trg()->start();
 
 				if (!all_instructions.count(succ_addr)){
-					if (!isInGaps(gap_regions, succ_addr)){
+					if (succ_addr != 0xffffffff && !isInGaps(gap_regions, succ_addr)){
 						return false;
 					}
 				}
@@ -92,7 +92,6 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 	symtab_cs = new SymtabCodeSource(input_string);
 	for (auto addr: addr_set){
 		//auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
-	//	cout << "Disassemble gap at " << hex << addr << endl;
 		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, false);
 		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
 		code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, true);

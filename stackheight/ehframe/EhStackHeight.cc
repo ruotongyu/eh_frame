@@ -46,8 +46,8 @@ void dumpStackHeight(const char* binary_path, const char* inst_pb, const char* o
 
 	    for (int i_i = 0; i_i < cur_bb.instructions_size(); i_i++){
 		auto cur_addr = cur_bb.instructions(i_i).va();
-
-		if(!fp->request_stack_height(cur_addr, height)){
+		auto res = fp->request_stack_height(cur_addr, height);
+		if(!res){
 		    LOG(INFO) << "stack heigth at " << hex << cur_addr << " : " << dec << height << endl;
 		    auto cur_height = sh_proto.add_heights();
 		    cur_height->set_address(cur_addr);
@@ -58,10 +58,12 @@ void dumpStackHeight(const char* binary_path, const char* inst_pb, const char* o
     }
 
     if (!sh_proto.SerializeToOstream(&out_file)){
+	    cout << "error!" << endl;
 	LOG(FATAL) << "Failed to write proto " << output << endl;
 	delete fp;
 	return;
     }
+    out_file.close();
     delete fp;
 }
 

@@ -81,7 +81,7 @@ class FrameParser{
 
 	bool check_cfa_def(Dwarf_Frame_Op*, Dwarf_Signed);
 
-	bool get_stack_height(Dwarf_Debug, Dwarf_Fde, Dwarf_Addr, Dwarf_Error*, signed&);
+	bool get_stack_height(Dwarf_Debug&, Dwarf_Fde&, Dwarf_Addr, Dwarf_Error*, signed&);
 
 	bool parse_one_regentry(struct Dwarf_Regtable_Entry3_s*, signed&);
     

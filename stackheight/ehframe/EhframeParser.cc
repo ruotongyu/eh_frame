@@ -77,7 +77,7 @@ FrameParser::FrameParser(const char* f_path){
     close(fd);
 }
 
-bool FrameParser::get_stack_height(Dwarf_Debug dbg, Dwarf_Fde fde, 
+bool FrameParser::get_stack_height(Dwarf_Debug& dbg, Dwarf_Fde& fde, 
 	Dwarf_Addr cur_addr, Dwarf_Error* error, signed& height){
     int res;
     Dwarf_Addr lowpc = 0;
@@ -139,6 +139,8 @@ bool FrameParser::get_stack_height(Dwarf_Debug dbg, Dwarf_Fde fde,
     }
     cfa_entry = &tab3.rt3_cfa_rule;
     parse_one_regentry(cfa_entry, height);
+    free(tab3.rt3_rules);
+    return true;
 }
 
 bool FrameParser::parse_one_regentry(struct Dwarf_Regtable_Entry3_s *entry, signed& height){
