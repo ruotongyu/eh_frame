@@ -29,30 +29,32 @@ def dumpBlocks(binary, output):
     sp = p.arch.sp_offset
     regs = {sp}
     stack = stackheight_pb2.StackHeights()
-    pbStack = stack.heights.add()
     for func_addr in cfg.functions:
         func = cfg.functions[func_addr]
-        
         if func.alignment:
             continue
-        print("Function Address: ", hex(func_addr), func.name)
         try:
             sptracker = p.analyses.StackPointerTracker(func, regs, track_memory=False)
         except:
-            print("No Valid Blocks")
+            continue
         for bb in func.blocks:
             #print("basic block addr 0x%x, its size 0x%x" % (bb.addr, bb.size))
+            #for key in sptracker.states().keys():
             cfg_node = cfg.get_any_node(bb.addr)
             if bb.size != 0 and cfg_node != None:
-                sp_result = sptracker.offset_after_block(bb.addr, sp)
-                if sp_result == None:
-                    print("None Object:", hex(bb.addr))
-                else:
-                    pbStack.address = bb.addr
-                    if sp_result >= 9223372036854775808:
-                        sp_result = 18446744073709551616 - sp_result
-                    pbStack.height = sp_result
-                    print("Block Address: ", hex(bb.addr), "SP Stack Pointer Offset: ", hex(sp_result))
+                for inst in bb.capstone.insns:
+                    pbStack = stack.heights.add()
+                    inst_va = inst.address
+                    sp_result = sptracker.offset_before(inst_va, sp)
+                    if sp_result == None:
+                        #print("None Object:", hex(bb.addr))
+                        continue
+                    else:
+                        pbStack.address = inst_va
+                        if sp_result >= 9223372036854775808:
+                            sp_result = 18446744073709551616 - sp_result
+                        pbStack.height = sp_result
+                        #print("Block Address: ", hex(inst_va), "SP Stack Pointer Offset: ", hex(sp_result))
     f = open(output, "wb")
     f.write(stack.SerializeToString())
     f.close()

@@ -52,7 +52,7 @@ if [ ! -f $TOOL ]; then
   exit -1
 fi
 
-for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v O1 | grep -v ccr_ | grep -v ida_ | grep -v shuffle` ; do
+for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v O1 | grep -v ccr_m32 | grep -v ida_ | grep -v shuffle`; do
   #echo "current to be handled file is $file"
   replace_tmp1=${file//strip_/}
   binary_file=${replace_tmp1//\.strip/}
@@ -65,7 +65,7 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
 	  continue
   fi
   ehfile=${dir_name}/ehStackHeight_$base_name.pb
-  dyninst=${sdir}/StackHeight_dyninst_$base_name.strip.pb
+  angr=${sdir}/Block-angrBB_Stack-$base_name.pb
   optimized_dir=`echo $file | rev | cut -d '/' -f2 | rev`
   #echo "optimized dir is $optimized_dir"
   #echo "groundtruth file is $gtBlock_file"
@@ -92,6 +92,6 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
 
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
-  echo "python3 $TOOL -e $ehfile -a $dyninst -t dyninst"
-  python3 $TOOL -e $ehfile -a $dyninst -t dyninst 
+  echo "python3 $TOOL -e $ehfile -a $angr -t angr"
+  python3 $TOOL -e $ehfile -a $angr -t angr
 done

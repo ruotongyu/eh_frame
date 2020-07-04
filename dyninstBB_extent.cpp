@@ -233,6 +233,7 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 		seen.insert(func->addr());
 		blocks::Function* pbFunc = pbModule.add_fuc();
 		pbFunc->set_va(func->addr());
+		//cout << "Function Start: " << hex << func->addr() << endl;
 		for (auto block: func->blocks()){
 			blocks::BasicBlock* pbBB = pbFunc->add_bb();
 			pbBB->set_va(block->start());
@@ -242,12 +243,14 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
+			//cout << "Block Addr: " << hex << cur_addr << endl;
 			for (auto p : instructions){
 				Dyninst::InstructionAPI::Instruction inst = p.second;
 				blocks::Instruction* pbInst = pbBB->add_instructions();
 				pbInst->set_va(cur_addr);
 				pbInst->set_size(inst.size());
 				all_instructions.insert(cur_addr);
+				//cout << "Inst: 0x" << hex << cur_addr << "  " << inst.format() << endl;
 				for (int i = 1; i < inst.size(); i++){
 					invalid_inst.insert(cur_addr + i);
 				}
@@ -260,6 +263,7 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 			for (auto succ: block->targets()){
 				blocks::Child* pbSuc = pbBB->add_child();
 				pbSuc->set_va(succ->trg()->start());
+				//cout << "successor: " << hex << succ->trg()->start() << endl;
 			}
 		}
 	}
@@ -508,7 +512,6 @@ int main(int argc, char** argv){
 	//}
 	auto output_file = const_cast<char* >(output_string);
 	std::fstream output(output_file, std::ios::out | std::ios::trunc | std::ios::binary);
-
 	if (!pbModule.SerializeToOstream(&output)){
 		cout << "Failed to write the protocol buffer" << endl;
 		return -1;
