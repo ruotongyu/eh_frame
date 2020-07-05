@@ -500,7 +500,9 @@ int main(int argc, char** argv){
 	
 	map<uint64_t, uint64_t> AllRef;
 	//AllRef = CCReference(*code_obj_eh, regs, instructions);
-	AllRef = DCReference(*code_obj_eh, data_regs, regs, file_offset, input_string, x64, instructions);
+	//AllRef = DCReference(data_regs, regs, file_offset, input_string, x64, instructions);
+	//AllRef = DDReference(data_regs, file_offset, input_string, x64);
+	AllRef = CDReference(*code_obj_eh, regs, instructions, data_regs);
 	exit(1);
 
 	//cout << "Data: " << hex << DataRefMap[4915278] << "Code: " << ref_addr[4915278] << endl;

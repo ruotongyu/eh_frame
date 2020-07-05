@@ -58,7 +58,7 @@ map<uint64_t, uint64_t> CCReference(Dyninst::ParseAPI::CodeObject &codeobj, vect
 	return res;
 }
 
-map<uint64_t, uint64_t> DCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& data_regs, vector<SymtabAPI::Region *>& code_regs, uint64_t offset, char* input, char* x64, set<unsigned> &instructions) {
+map<uint64_t, uint64_t> DCReference(vector<SymtabAPI::Region *>& data_regs, vector<SymtabAPI::Region *>& code_regs, uint64_t offset, char* input, char* x64, set<unsigned> &instructions) {
 	map<uint64_t, uint64_t> RefMap;
 	getDataReference(data_regs, offset, input, x64, RefMap);
 	map<uint64_t, uint64_t> res;
@@ -84,7 +84,80 @@ map<uint64_t, uint64_t> DCReference(Dyninst::ParseAPI::CodeObject &codeobj, vect
 	return res;
 }
 
-	
+map<uint64_t, uint64_t> DDReference(vector<SymtabAPI::Region *>& regs, uint64_t offset, char* input, char* x64) {
+	map<uint64_t, uint64_t> RefMap;
+	getDataReference(regs, offset, input, x64, RefMap);
+	map<uint64_t, uint64_t> res;
+	string list[6] = {".rodata", ".data", ".fini_array", ".init_array", ".data.rel.ro", ".data.rel.ro.local"};
+	map<uint64_t, uint64_t> dataSecList;
+	set<string> white_list;
+	for (int i = 0; i < 6; ++i) {
+		white_list.insert(list[i]);
+	}
+	for (auto &reg: regs){
+		if (!white_list.count(reg->getRegionName())){
+			continue;	
+		}
+		uint64_t secStart = (uint64_t) reg->getMemOffset();
+		uint64_t secSize = (uint64_t) reg->getMemSize();
+		dataSecList[secStart] = secSize;
+		cout << "section Range: " << hex << secStart << "  " << secSize << endl;
+	}
+	for (auto ref: RefMap){
+		for (auto sec: dataSecList){
+			if (ref.second >= sec.first && ref.second < sec.first + sec.second){
+				res[ref.first] = ref.second;
+				cout << "Data Reference: " << hex << ref.first << " Target: " << ref.second << endl;
+				break;
+			}
+		}
+	}
+	cout << dec << res.size() << endl;
+	return res;
+}
+
+map<uint64_t, uint64_t> CDReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& code_regs, set<unsigned> &instructions, vector<SymtabAPI::Region *>& data_regs){
+	map<uint64_t, uint64_t> RefMap;
+	getCodeReference(codeobj, RefMap);
+	uint64_t textSec, textSecSize;
+	map<uint64_t, uint64_t> res;
+	std::string text (".text");
+	for (auto reg : code_regs){
+		if (text.compare(reg->getRegionName()) == 0){
+			textSec = (uint64_t) reg->getMemOffset();
+			textSecSize = (uint64_t) reg->getMemSize();
+		}
+	}
+	string list[6] = {".rodata", ".data", ".fini_array", ".init_array", ".data.rel.ro", ".data.rel.ro.local"};
+	map<uint64_t, uint64_t> dataSecList;
+	set<string> white_list;
+	for (int i = 0; i < 6; ++i) {
+		white_list.insert(list[i]);
+	}
+	for (auto &reg: data_regs){
+		if (!white_list.count(reg->getRegionName())){
+			continue;	
+		}
+		uint64_t secStart = (uint64_t) reg->getMemOffset();
+		uint64_t secSize = (uint64_t) reg->getMemSize();
+		dataSecList[secStart] = secSize;
+		cout << "section Range: " << hex << secStart << "  " << secSize << endl;
+	}
+	for (auto ref: RefMap){
+		if (ref.first < textSec || ref.first >= textSec + textSecSize) {
+			continue;
+		}
+		for (auto sec: dataSecList){
+			if (ref.second >= sec.first && ref.second < sec.first + sec.second){
+				res[ref.first] = ref.second;
+				cout << "Data Reference: " << hex << ref.first << " Target: " << ref.second << endl;
+				break;
+			}
+		}
+	}
+	return res;
+}
+
 void getDataReference(std::vector<SymtabAPI::Region *>& regs, uint64_t offset, char* input, char* x64, map<uint64_t, uint64_t> &RefMap){
 	size_t code_size;
 	struct stat results;
