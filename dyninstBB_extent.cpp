@@ -85,7 +85,10 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 	}
 	return true;
 }
-void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule, set<uint64_t> &nops_inst, map<uint64_t, uint64_t> DataRef, map<uint64_t, uint64_t> CodeRef, set<uint64_t> &invalid_inst) {
+std::set<uint64_t> CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule, set<uint64_t> &nops_inst, map<uint64_t, uint64_t> DataRef, map<uint64_t, uint64_t> CodeRef, set<uint64_t> &invalid_inst) {
+
+	std::set<uint64_t> filted_funcs;
+
 	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;
 	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
@@ -125,43 +128,29 @@ void CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instru
 					continue;
 				}
 
-				blocks::Function* pbFunc = pbModule.add_fuc();
-				//uint64_t func_end = (uint64_t) r_f->addr();
-				//pbFunc->set_va(r_f->addr());
 				int inst_num = 0;
 				bool NopFunc = false;
 				for (auto block: r_f->blocks()){
-					blocks::BasicBlock* pbBB = pbFunc->add_bb();
-					pbBB->set_va(block->start());
-					pbBB->set_parent(r_f->addr());
 					Dyninst::ParseAPI::Block::Insns instructions;
 					block->getInsns(instructions);
-					uint64_t cur_addr = block->start();
 					for (auto p: instructions){
-						Dyninst::InstructionAPI::Instruction inst = p.second;
-						blocks::Instruction* pbInst = pbBB->add_instructions();
-						pbInst->set_va(cur_addr);
-						pbInst->set_size(inst.size());
+						auto inst = p.second;
 						if (inst_num == 0 && isNopInsn(inst)){
 							NopFunc = true;
 						}
-						cur_addr += inst.size();
-						//instructions.insert(cur_addr);
 						inst_num += 1;
 					}
-					for (auto succ: block->targets()) {
-						blocks::Child* pbSuc = pbBB->add_child();
-						pbSuc->set_va(succ->trg()->start());
-					}
 				}
+
 				if (inst_num > 0 && !NopFunc) {
-					pbFunc->set_va(r_f->addr());
+					filted_funcs.insert(addr);
 				}
 			}
 		}
 		delete code_obj_gap;
 	}
 	delete symtab_cs;
+	return filted_funcs;
 }
 
 void expandFunction(Dyninst::ParseAPI::CodeObject &codeobj, map<uint64_t, uint64_t>& pc_funcs, set<uint64_t> &eh_functions) {
@@ -224,23 +213,64 @@ void dumpStackHeight(ParseAPI::CodeObject* code_obj, const char* file_name){
     }
 }
 
-set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map, blocks::module &pbModule, set<uint64_t> &nops_inst, set<uint64_t> &invalid_inst){
+set<uint64_t> getInsts(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all_instructions, map<uint64_t, uint64_t> &bb_map, set<uint64_t> &nops_inst, set<uint64_t> &invalid_inst){
 	std::set<Dyninst::Address> seen;
 	set<uint64_t> block_list;
 	for (auto func:codeobj.funcs()){
 		if(seen.count(func->addr())){
 			continue;
 		}
+
 		seen.insert(func->addr());
+
+		//cout << "Function Start: " << hex << func->addr() << endl;
+		for (auto block: func->blocks()){
+
+			block_list.insert((uint64_t) block->start());
+			bb_map[(uint64_t) block->start()] = (uint64_t) block->end();
+			Dyninst::ParseAPI::Block::Insns instructions;
+			block->getInsns(instructions);
+			unsigned cur_addr = block->start();
+			//cout << "Block Addr: " << hex << cur_addr << endl;
+			for (auto p : instructions){
+				Dyninst::InstructionAPI::Instruction inst = p.second;
+
+				all_instructions.insert(cur_addr);
+				//cout << "Inst: 0x" << hex << cur_addr << "  " << inst.format() << endl;
+				for (int i = 1; i < inst.size(); i++){
+					invalid_inst.insert(cur_addr + i);
+				}
+
+				cur_addr += inst.size();
+
+				if (isNopInsn(inst)) {
+					nops_inst.insert(cur_addr);
+				}
+
+				//cout << "Instruction Addr " << hex << cur_addr  << endl;
+			}
+		}
+	}
+	return block_list;
+}
+
+void dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, blocks::module &pbModule){
+
+	std::set<Dyninst::Address> seen;
+	for (auto func:codeobj.funcs()){
+		if(seen.count(func->addr())){
+			continue;
+		}
+
+		seen.insert(func->addr());
+
 		blocks::Function* pbFunc = pbModule.add_fuc();
 		pbFunc->set_va(func->addr());
-		//cout << "Function Start: " << hex << func->addr() << endl;
+
 		for (auto block: func->blocks()){
 			blocks::BasicBlock* pbBB = pbFunc->add_bb();
 			pbBB->set_va(block->start());
 			pbBB->set_parent(func->addr());
-			block_list.insert((uint64_t) block->start());
-			bb_map[(uint64_t) block->start()] = (uint64_t) block->end();
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
@@ -250,15 +280,8 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 				blocks::Instruction* pbInst = pbBB->add_instructions();
 				pbInst->set_va(cur_addr);
 				pbInst->set_size(inst.size());
-				all_instructions.insert(cur_addr);
-				//cout << "Inst: 0x" << hex << cur_addr << "  " << inst.format() << endl;
-				for (int i = 1; i < inst.size(); i++){
-					invalid_inst.insert(cur_addr + i);
-				}
+
 				cur_addr += inst.size();
-				if (isNopInsn(inst)) {
-					nops_inst.insert(cur_addr);
-				}
 				//cout << "Instruction Addr " << hex << cur_addr  << endl;
 			}
 			for (auto succ: block->targets()){
@@ -268,7 +291,6 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 			}
 		}
 	}
-	return block_list;
 }
 
 bool isCFIns(InstructionAPI::Instruction* ins){
@@ -452,7 +474,7 @@ int main(int argc, char** argv){
 	set<uint64_t> nops_inst;
 	blocks::module pbModule;
 	set<uint64_t> invalid_inst;
-	bb_list=dumpCFG(*code_obj_eh, instructions, bb_map, pbModule, nops_inst, invalid_inst);
+	bb_list=getInsts(*code_obj_eh, instructions, bb_map, nops_inst, invalid_inst);
 
 	//dumpStackHeight(code_obj_eh.get(), input_string);
 
@@ -480,6 +502,7 @@ int main(int argc, char** argv){
 	map<uint64_t, uint64_t> gap_regions;
 	uint64_t gap_regions_num = 0;
 	gap_regions = getGaps(pc_funcs, regs, gap_regions_num);
+
 #ifdef DEBUG_GAPS
 	unsigned gap_size = 0;
 	for (auto g_it = gap_regions.begin(); g_it != gap_regions.end(); g_it++){
@@ -489,7 +512,6 @@ int main(int argc, char** argv){
 		cout << "gap: " << hex << g_it->first << " -> " << g_it->second 
 			<< " . Size " << gap_size << endl;
 	}
-	exit(-1);
 #endif
 	//ScanGaps(gap_regions, tailCall);
 	//exit(1);
@@ -498,13 +520,6 @@ int main(int argc, char** argv){
 	map<uint64_t, uint64_t> DataRefMap;
 	dataRef = getDataRef(data_regs, file_offset, input_string, x64, DataRefMap);
 	
-	map<uint64_t, uint64_t> AllRef;
-	//AllRef = CCReference(*code_obj_eh, regs, instructions);
-	//AllRef = DCReference(data_regs, regs, file_offset, input_string, x64, instructions);
-	//AllRef = DDReference(data_regs, file_offset, input_string, x64);
-	AllRef = CDReference(*code_obj_eh, regs, instructions, data_regs);
-	exit(1);
-
 	//cout << "Data: " << hex << DataRefMap[4915278] << "Code: " << ref_addr[4915278] << endl;
 	//merge code ref and data ref
 	unionSet(codeRef, dataRef);
@@ -514,10 +529,14 @@ int main(int argc, char** argv){
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	//set<uint64_t> nops;
-	CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule, nops_inst, DataRefMap, ref_addr, invalid_inst);	
-	//for (auto func: identified) {
-	//	cout << hex << func << endl; 
-	//}
+	auto new_funcs = CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule, nops_inst, DataRefMap, ref_addr, invalid_inst);	
+
+	for (auto cur_addr : new_funcs){
+		code_obj_eh->parse(cur_addr, true);
+	}
+
+
+	dumpCFG(*code_obj_eh, pbModule);
 	auto output_file = const_cast<char* >(output_string);
 	std::fstream output(output_file, std::ios::out | std::ios::trunc | std::ios::binary);
 	if (!pbModule.SerializeToOstream(&output)){
@@ -526,6 +545,7 @@ int main(int argc, char** argv){
 	}
 	output.close();
 	return 0;
+
 	//CheckLinker(fn_functions, input_string);
 	//FilterNotInCode(identified, regs);
 	//set<uint64_t> fixed;

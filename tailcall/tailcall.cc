@@ -86,7 +86,7 @@ void tailCallAnalyzer::analyze(){
 				deleted_funcs.insert(target);
 				}
 			    }
-			}
+			} // end if(getStackHeight...)
 			break;
 		}
 	    }
