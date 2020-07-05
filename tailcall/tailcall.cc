@@ -4,7 +4,11 @@
 
 #define DEBUG_TAIL_CALL
 
-tailCallAnalyzer::tailCallAnalyzer(ParseAPI::CodeObject* _co, std::map<uint64_t, uint64_t> _refs, const char* _f_path) : codeobj(_co), refs(_refs), cached_func(0), cached_sa(0){
+tailCallAnalyzer::tailCallAnalyzer(ParseAPI::CodeObject* _co, std::map<uint64_t, uint64_t>* _refs, const char* _f_path){
+    codeobj = _co;
+    refs = _refs;
+    cached_func = 0;
+    cached_sa = 0;
     frame_parser = new FrameParser(_f_path);
 }
 
@@ -17,16 +21,16 @@ tailCallAnalyzer::~tailCallAnalyzer(){
 
 void tailCallAnalyzer::analyze(){
     std::set<uint64_t> targets;
-    std::map<uint64_t, parseAPI::Function*> all_funcs;
+    std::map<uint64_t, ParseAPI::Function*> all_funcs;
 
     std::set<uint64_t> new_funcs;
     std::set<uint64_t> deleted_funcs;
 
-    uint32_t height;
+    int32_t height;
     uint64_t target;
 
     for (auto ref: *refs){
-	targets.insert(ref.second());
+	targets.insert(ref.second);
     }
 
     // find the target of call instructions
@@ -36,7 +40,7 @@ void tailCallAnalyzer::analyze(){
 
 	for (auto bb: func->blocks()){
 	    for(auto succ: bb->targets()){
-		if (succ->type() == CALL){
+		if (succ->type() == ParseAPI::CALL){
 		    targets.insert(succ->trg()->start());
 		}
 	    }
@@ -48,11 +52,11 @@ void tailCallAnalyzer::analyze(){
 	for(auto bb: func->blocks()){
 	    for(auto succ: bb->targets()){
 		switch(succ->type()){
-		    case COND_TAKEN:
-		    case DIRECT:
-		    case INDIRECT:
+		    case ParseAPI::COND_TAKEN:
+		    case ParseAPI::DIRECT:
+		    case ParseAPI::INDIRECT:
 			if (getStackHeight(bb->lastInsnAddr(), func, bb, height)){
-			    target = succ->trg->start();
+			    target = succ->trg()->start();
 
 			    // check if the height of stack is balanced
 			    if ((height == -8 || height == -4)){
@@ -92,7 +96,7 @@ void tailCallAnalyzer::analyze(){
     for (auto func_addr: new_funcs){
 #ifdef DEBUG_TAIL_CALL
 	std::cerr << "[Tail call detection]: create a new function at " 
-	    << std::hex << func_addr << endl;
+	    << std::hex << func_addr << std::endl;
 #endif
 	codeobj->parse(func_addr, false);
     }
@@ -110,11 +114,12 @@ void tailCallAnalyzer::analyze(){
 
 }
 
-bool tailCallAnalyzer::getStackHeight(uint64_t address, ParseAPI:Function* func, ParseAPI::Block* block, int32_t& height){
-    // request stack height from ehframe first
-    int32_t height;
+bool tailCallAnalyzer::getStackHeight(uint64_t address, ParseAPI::Function* func, ParseAPI::Block* block, int32_t& height){
     bool ret_result = false;
     std::stringstream ss;
+    std::vector<std::pair<Absloc, StackAnalysis::Height>> heights;
+
+    // request stack height from ehframe first
     if (!frame_parser->request_stack_height(address, height))
 	return true;
 
@@ -128,8 +133,7 @@ bool tailCallAnalyzer::getStackHeight(uint64_t address, ParseAPI:Function* func,
 	cached_func = func->addr();
     }
 
-    std::vector<std::pair<Absloc, StackAnalysis::Height>> heights;
-    sa->findDefinedHeights(block, addr, heights);
+    cached_sa->findDefinedHeights(block, address, heights);
     for (auto iter = heights.begin(); iter != heights.end(); iter++){
 	const Absloc &loc = iter->first;
 	if (!loc.isSP()){
