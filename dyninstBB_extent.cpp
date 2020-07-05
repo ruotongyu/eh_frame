@@ -21,7 +21,7 @@
 #include "blocks.pb.h"
 #include "utils.h"
 #include "loadInfo.h"
-
+#include "Reference.h"
 // header of stackheight parser
 #include "stackheight/ehframe/EhframeParser.h"
 
@@ -233,7 +233,7 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 		seen.insert(func->addr());
 		blocks::Function* pbFunc = pbModule.add_fuc();
 		pbFunc->set_va(func->addr());
-		//cout << "Function Start: " << hex << func->addr() << endl;
+		cout << "Function Start: " << hex << func->addr() << endl;
 		for (auto block: func->blocks()){
 			blocks::BasicBlock* pbBB = pbFunc->add_bb();
 			pbBB->set_va(block->start());
@@ -243,14 +243,14 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 			Dyninst::ParseAPI::Block::Insns instructions;
 			block->getInsns(instructions);
 			unsigned cur_addr = block->start();
-			//cout << "Block Addr: " << hex << cur_addr << endl;
+			cout << "Block Addr: " << hex << cur_addr << endl;
 			for (auto p : instructions){
 				Dyninst::InstructionAPI::Instruction inst = p.second;
 				blocks::Instruction* pbInst = pbBB->add_instructions();
 				pbInst->set_va(cur_addr);
 				pbInst->set_size(inst.size());
 				all_instructions.insert(cur_addr);
-				//cout << "Inst: 0x" << hex << cur_addr << "  " << inst.format() << endl;
+				cout << "Inst: 0x" << hex << cur_addr << "  " << inst.format() << endl;
 				for (int i = 1; i < inst.size(); i++){
 					invalid_inst.insert(cur_addr + i);
 				}
@@ -263,7 +263,7 @@ set<uint64_t> dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &all
 			for (auto succ: block->targets()){
 				blocks::Child* pbSuc = pbBB->add_child();
 				pbSuc->set_va(succ->trg()->start());
-				//cout << "successor: " << hex << succ->trg()->start() << endl;
+				cout << "successor: " << hex << succ->trg()->start() << endl;
 			}
 		}
 	}
@@ -497,6 +497,10 @@ int main(int argc, char** argv){
 	map<uint64_t, uint64_t> DataRefMap;
 	dataRef = getDataRef(data_regs, file_offset, input_string, x64, DataRefMap);
 	
+	map<uint64_t, uint64_t> AllRef;
+	ScanAllReference(*code_obj_eh, data_regs, AllRef, file_offset, input_string, x64);
+	exit(1);
+
 	//cout << "Data: " << hex << DataRefMap[4915278] << "Code: " << ref_addr[4915278] << endl;
 	//merge code ref and data ref
 	unionSet(codeRef, dataRef);

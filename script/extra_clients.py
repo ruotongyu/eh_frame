@@ -2,7 +2,7 @@
 
 
 if __name__ == "__main__":
-    f = open('/home/binpang/Desktop/dyninst/Result/servers.fn', 'r')
+    f = open('/home/binpang/Desktop/Result/servers.fn', 'r')
     raw_num = 0
     func_num = 0
     eh_num = 0
