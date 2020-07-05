@@ -25,9 +25,9 @@ using namespace std;
 using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
-void CCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& code_regs, map<uint64_t, uint64_t> &RefMap, set<unsigned> &instructions);
+map<uint64_t, uint64_t> CCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& code_regs, set<unsigned> &instructions);
 
-void DCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& data_regs, vector<SymtabAPI::Region *>& code_regs, map<uint64_t, uint64_t> &RefMap, uint64_t offset, char* input, char* x64, set<unsigned> &instructions);
+map<uint64_t, uint64_t> DCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& data_regs, vector<SymtabAPI::Region *>& code_regs, uint64_t offset, char* input, char* x64, set<unsigned> &instructions);
 
 void ScanAllReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& regs, vector<SymtabAPI::Region *>& code_regs, map<uint64_t, uint64_t> &RefMap, uint64_t offset, char* input, char* x64, set<unsigned> &instructions);
 

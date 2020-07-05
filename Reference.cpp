@@ -30,10 +30,11 @@ using namespace InstructionAPI;
 using namespace Dyninst::ParseAPI;
 
 
-void CCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& code_regs, map<uint64_t, uint64_t> &RefMap, set<unsigned> &instructions){
+map<uint64_t, uint64_t> CCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& code_regs, set<unsigned> &instructions){
+	map<uint64_t, uint64_t> RefMap;
 	getCodeReference(codeobj, RefMap);
-	cout << "Map Size: " << RefMap.size() << endl;
 	uint64_t textSec, textSecSize;
+	map<uint64_t, uint64_t> res;
 	std::string text (".text");
 	for (auto reg : code_regs){
 		if (text.compare(reg->getRegionName()) == 0){
@@ -43,25 +44,24 @@ void CCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Regio
 	}
 	for (auto ref: RefMap){
 		if (ref.first < textSec || ref.first >= textSec + textSecSize) {
-			RefMap.erase(ref.first);
 			continue;
 		}
 		if (ref.second >= textSec && ref.second < textSec + textSecSize){
-			if (instructions.count(ref.second) == 0) {
-				RefMap.erase(ref.first);
-				cout << "Invalid Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
-			} else{
-				cout << "Code Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
+			if (instructions.count(ref.second) != 0) {
+				//cout << "Invalid Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
+				//cout << "Code Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
+				res[ref.first] = ref.second;
 			}
-		} else{
-			RefMap.erase(ref.first);
 		}
 	}
-	cout << "Size of Map: " << dec << RefMap.size() << endl;
+	cout << dec << res.size() << endl;
+	return res;
 }
 
-void DCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& data_regs, vector<SymtabAPI::Region *>& code_regs, map<uint64_t, uint64_t> &RefMap, uint64_t offset, char* input, char* x64, set<unsigned> &instructions) {
+map<uint64_t, uint64_t> DCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Region *>& data_regs, vector<SymtabAPI::Region *>& code_regs, uint64_t offset, char* input, char* x64, set<unsigned> &instructions) {
+	map<uint64_t, uint64_t> RefMap;
 	getDataReference(data_regs, offset, input, x64, RefMap);
+	map<uint64_t, uint64_t> res;
 	uint64_t textSec, textSecSize;
 	std::string text (".text");
 	for (auto reg : code_regs){
@@ -72,16 +72,16 @@ void DCReference(Dyninst::ParseAPI::CodeObject &codeobj, vector<SymtabAPI::Regio
 	}
 	for (auto ref: RefMap){
 		if (ref.second >= textSec && ref.second < textSec + textSecSize){
-			if (instructions.count(ref.second) == 0) {
-				RefMap.erase(ref.first);
-				cout << "Invalid Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
-			} else{
+			if (instructions.count(ref.second) != 0) {
 				cout << "Code Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
+				res[ref.first] = ref.second;
+			} else {
+				cout << "Invalid Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
 			}
 		}
-	}else{
-		RefMap.erase(ref.first);
 	}
+	cout << res.size() << endl;
+	return res;
 }
 
 	

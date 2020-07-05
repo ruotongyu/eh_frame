@@ -499,7 +499,8 @@ int main(int argc, char** argv){
 	dataRef = getDataRef(data_regs, file_offset, input_string, x64, DataRefMap);
 	
 	map<uint64_t, uint64_t> AllRef;
-	CCReference(*code_obj_eh, regs, AllRef, instructions);
+	//AllRef = CCReference(*code_obj_eh, regs, instructions);
+	AllRef = DCReference(*code_obj_eh, data_regs, regs, file_offset, input_string, x64, instructions);
 	exit(1);
 
 	//cout << "Data: " << hex << DataRefMap[4915278] << "Code: " << ref_addr[4915278] << endl;
