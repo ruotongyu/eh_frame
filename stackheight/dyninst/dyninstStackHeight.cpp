@@ -100,7 +100,6 @@ void StackHeight(stackheight::StackHeights& sh_proto, Dyninst::ParseAPI::Functio
     signed long height_num = 0;
     std::stringstream ss;
     Dyninst::StackAnalysis sa(func);
-    sa = Dyninst::StackAnalysis(func);
     for (auto block: func->blocks()){
 	uint64_t addr = 0;
 	auto cur_ret = block->getInsn(addr);
