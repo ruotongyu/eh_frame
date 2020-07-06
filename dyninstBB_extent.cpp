@@ -22,8 +22,13 @@
 #include "utils.h"
 #include "loadInfo.h"
 #include "Reference.h"
+
 // header of stackheight parser
 #include "stackheight/ehframe/EhframeParser.h"
+
+// header of tail call detection
+#include "tailcall/tailcall.h"
+
 
 using namespace Dyninst;
 using namespace SymtabAPI;
@@ -38,7 +43,7 @@ using namespace Dyninst::ParseAPI;
 //#define DEBUG_BASICBLOCK
 //#define FN_GAP_PRINT	
 //#define DEBUG_EHFUNC
-#define DEBUG_DISASSEMBLE
+//#define DEBUG_DISASSEMBLE
 bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t> &invalid_inst){
 	set<Address> seen;
 	for (auto func: codeobj.funcs()){
@@ -254,40 +259,84 @@ set<uint64_t> getInsts(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned> &al
 	return block_list;
 }
 
-void dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, blocks::module &pbModule){
+void dumpBlocks(blocks::Function* pbFunc, ParseAPI::Function* func, std::set<uint64_t>& visited_blocks){
+	for (auto block: func->blocks()){
+		if (visited_blocks.find(block->start()) != visited_blocks.end())
+			continue;
+		visited_blocks.insert(block->start());
+
+		blocks::BasicBlock* pbBB = pbFunc->add_bb();
+		pbBB->set_va(block->start());
+		pbBB->set_parent(func->addr());
+		Dyninst::ParseAPI::Block::Insns instructions;
+		block->getInsns(instructions);
+		unsigned cur_addr = block->start();
+		//cout << "Block Addr: " << hex << cur_addr << endl;
+		for (auto p : instructions){
+			Dyninst::InstructionAPI::Instruction inst = p.second;
+			blocks::Instruction* pbInst = pbBB->add_instructions();
+			pbInst->set_va(cur_addr);
+			pbInst->set_size(inst.size());
+
+			cur_addr += inst.size();
+			//cout << "Instruction Addr " << hex << cur_addr  << endl;
+		}
+		for (auto succ: block->targets()){
+			blocks::Child* pbSuc = pbBB->add_child();
+			pbSuc->set_va(succ->trg()->start());
+			//cout << "successor: " << hex << succ->trg()->start() << endl;
+		}
+		}
+}
+
+void dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, blocks::module &pbModule, const std::map<uint64_t, uint64_t>& merged_funcs){
 
 	std::set<Dyninst::Address> seen;
+	std::set<uint64_t> visited_blocks;
+	Dyninst::Address cur_addr;
+
+	std::map<uint64_t, std::set<uint64_t>> merged_map;
+	std::map<uint64_t, ParseAPI::Function*> funcs_map;
+
+	for(auto func: codeobj.funcs()){
+		funcs_map[func->addr()] = func;
+	}
+
+	for(auto merge_func: merged_funcs){
+		if(merged_map.find(merge_func.second) == merged_map.end()){
+			merged_map[merge_func.second] = std::set<uint64_t>();
+		} 
+		merged_map[merge_func.second].insert(merge_func.first);
+	}
+
 	for (auto func:codeobj.funcs()){
-		if(seen.count(func->addr())){
+
+		cur_addr = func->addr();
+		if(seen.count(cur_addr)){
 			continue;
 		}
 
-		seen.insert(func->addr());
+		// this is deleted functions
+		if (merged_funcs.find(cur_addr) != merged_funcs.end()){
+			continue;
+		}
+
+		seen.insert(cur_addr);
 
 		blocks::Function* pbFunc = pbModule.add_fuc();
-		pbFunc->set_va(func->addr());
+		pbFunc->set_va(cur_addr);
+		dumpBlocks(pbFunc, func, visited_blocks);
 
-		for (auto block: func->blocks()){
-			blocks::BasicBlock* pbBB = pbFunc->add_bb();
-			pbBB->set_va(block->start());
-			pbBB->set_parent(func->addr());
-			Dyninst::ParseAPI::Block::Insns instructions;
-			block->getInsns(instructions);
-			unsigned cur_addr = block->start();
-			//cout << "Block Addr: " << hex << cur_addr << endl;
-			for (auto p : instructions){
-				Dyninst::InstructionAPI::Instruction inst = p.second;
-				blocks::Instruction* pbInst = pbBB->add_instructions();
-				pbInst->set_va(cur_addr);
-				pbInst->set_size(inst.size());
+		auto cur_func_iter = merged_map.find(cur_addr);
 
-				cur_addr += inst.size();
-				//cout << "Instruction Addr " << hex << cur_addr  << endl;
-			}
-			for (auto succ: block->targets()){
-				blocks::Child* pbSuc = pbBB->add_child();
-				pbSuc->set_va(succ->trg()->start());
-				//cout << "successor: " << hex << succ->trg()->start() << endl;
+		// merge functions
+		if (cur_func_iter != merged_map.end()){
+			for(auto sub_funcs: cur_func_iter->second){
+				auto cur_merge_iter = funcs_map.find(sub_funcs);
+				if(cur_merge_iter != funcs_map.end()){
+					cout << "aha, merge function!\n";
+					dumpBlocks(pbFunc, cur_merge_iter->second, visited_blocks);
+				}
 			}
 		}
 	}
@@ -535,8 +584,16 @@ int main(int argc, char** argv){
 		code_obj_eh->parse(cur_addr, true);
 	}
 
+	auto ref_2c = CCReference(*code_obj_eh, regs, instructions);
+	auto ref_d2c = DCReference(data_regs, regs, file_offset, input_string, x64, instructions);
+	ref_2c.insert(ref_d2c.begin(), ref_d2c.end());
 
-	dumpCFG(*code_obj_eh, pbModule);
+	// tail call detection
+	std::map<uint64_t, uint64_t> merged_funcs;
+	tailCallAnalyzer* tailcall_ana = new tailCallAnalyzer(code_obj_eh.get(), &ref_2c, input_string);
+	tailcall_ana->analyze(merged_funcs);
+
+	dumpCFG(*code_obj_eh, pbModule, merged_funcs);
 	auto output_file = const_cast<char* >(output_string);
 	std::fstream output(output_file, std::ios::out | std::ios::trunc | std::ios::binary);
 	if (!pbModule.SerializeToOstream(&output)){
@@ -544,6 +601,8 @@ int main(int argc, char** argv){
 		return -1;
 	}
 	output.close();
+
+	delete tailcall_ana;
 	return 0;
 
 	//CheckLinker(fn_functions, input_string);

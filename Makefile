@@ -14,5 +14,5 @@ livenessAnaEhframe.o: livenessAnaEhframe.cc
 EhframeParser.o: stackheight/ehframe/EhframeParser.cc
 	$(CXX) -c -o $@ $^
 
-dyninstBB_extent: dyninstBB_extent.cpp blocks.pb.cc refInf.pb.cc utils.cpp loadInfo.cpp Reference.cpp livenessAnaEhframe.o InstructionCache.o EhframeParser.o
+dyninstBB_extent: dyninstBB_extent.cpp blocks.pb.cc refInf.pb.cc utils.cpp loadInfo.cpp Reference.cpp livenessAnaEhframe.o InstructionCache.o EhframeParser.o tailcall/tailcall.cc
 	g++ $(CXXFLAGS) -o $@ $^ $(LDFLAGS)

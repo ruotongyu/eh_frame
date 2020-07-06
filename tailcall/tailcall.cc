@@ -19,7 +19,7 @@ tailCallAnalyzer::~tailCallAnalyzer(){
 	delete cached_sa;
 }
 
-void tailCallAnalyzer::analyze(){
+void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
     std::set<uint64_t> targets;
     std::map<uint64_t, ParseAPI::Function*> all_funcs;
 
@@ -81,8 +81,9 @@ void tailCallAnalyzer::analyze(){
 					&& targets.find(target) == targets.end()){
 #ifdef DEBUG_TAIL_CALL
 				std::cerr << "[Tail call detection]: merge function at " << std::hex << succ->trg()->start() << 
-				    " to function " << succ->src()->start() << "!" << std::endl;
+				    " to function " << func->addr() << "!" << std::endl;
 #endif
+				merged_funcs[target] = func->addr();
 				deleted_funcs.insert(target);
 				}
 			    }
@@ -101,16 +102,25 @@ void tailCallAnalyzer::analyze(){
 	codeobj->parse(func_addr, false);
     }
 
+    // TODO. find a better way to merge these functions
+    /*
     for (auto func_addr: deleted_funcs){
 
 	auto cur_func_iter = all_funcs.find(func_addr);
+	if (cur_func_iter == all_funcs.end())
+		continue;
+
 #ifdef DEBUT_TAIL_CALL
 	std::cerr << "[Tail call detection]: delete function at "
 	    << std::hex << func_addr << endl;
 #endif
-	codeobj->destroy(cur_func_iter->second);
-	// TODO. merge the functions
+	std::cout << "destroy " << std::hex << func_addr << std::endl;
+
+	// TODO.  merge the function
+	//codeobj->destroy(cur_func_iter->second);
+	//delete cur_func_iter->second;
     }
+    */
 
 }
 

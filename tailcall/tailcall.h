@@ -21,7 +21,7 @@ class tailCallAnalyzer{
 
     public:
 	tailCallAnalyzer(ParseAPI::CodeObject* co, std::map<uint64_t, uint64_t>* refs, const char* f_path);
-	void analyze();
+	void analyze(std::map<uint64_t, uint64_t>&);
 	virtual ~tailCallAnalyzer();
 
 };
