@@ -334,7 +334,6 @@ void dumpCFG(Dyninst::ParseAPI::CodeObject &codeobj, blocks::module &pbModule, c
 			for(auto sub_funcs: cur_func_iter->second){
 				auto cur_merge_iter = funcs_map.find(sub_funcs);
 				if(cur_merge_iter != funcs_map.end()){
-					cout << "aha, merge function!\n";
 					dumpBlocks(pbFunc, cur_merge_iter->second, visited_blocks);
 				}
 			}

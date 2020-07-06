@@ -25,6 +25,7 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 
     std::set<uint64_t> new_funcs;
     std::set<uint64_t> deleted_funcs;
+    std::set<uint64_t> indirect_jump_targets;
 
     int32_t height;
     uint64_t target;
@@ -42,6 +43,9 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 	    for(auto succ: bb->targets()){
 		if (succ->type() == ParseAPI::CALL){
 		    targets.insert(succ->trg()->start());
+		} else if(succ->type() == ParseAPI::INDIRECT){
+		    // collect all indirect jump targets
+		    indirect_jump_targets.insert(succ->trg()->start());
 		}
 	    }
 	}
@@ -51,15 +55,30 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
     for(auto func: codeobj->funcs()){
 	for(auto bb: func->blocks()){
 	    for(auto succ: bb->targets()){
+
+		if (succ->trg()->start() == 0xffffffffffffffff)
+		    continue;
+
 		switch(succ->type()){
+		    // bin: do not consider indirect jump for now.
 		    case ParseAPI::COND_TAKEN:
 		    case ParseAPI::DIRECT:
-		    case ParseAPI::INDIRECT:
+			target = succ->trg()->start();
+
 			if (getStackHeight(bb->lastInsnAddr(), func, bb, height)){
-			    target = succ->trg()->start();
 
 			    // check if the height of stack is balanced
-			    if ((height == -8 || height == -4)){
+			    if ((height == 8 || height == 4)){
+
+				// the target is already a function.
+				// skip it.
+				if (all_funcs.find(target) != all_funcs.end()){
+				    continue;
+				}
+
+				if (indirect_jump_targets.find(target) != indirect_jump_targets.end()){
+				    continue;
+				}
 
 				// there are other references to the target
 				if(targets.find(target) != targets.end()){
@@ -67,9 +86,8 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 				std::cerr << "[Tail call detection]: at " << std::hex << succ->src()->start() << 
 				    ", the target " << succ->trg()->start() << " is a function!" << std::endl;
 #endif
-				if (all_funcs.find(target) == all_funcs.end()){
-				    new_funcs.insert(target);
-				    }
+				new_funcs.insert(target);
+
 				}
 			    } 
 
@@ -130,8 +148,10 @@ bool tailCallAnalyzer::getStackHeight(uint64_t address, ParseAPI::Function* func
     std::vector<std::pair<Absloc, StackAnalysis::Height>> heights;
 
     // request stack height from ehframe first
-    if (!frame_parser->request_stack_height(address, height))
+    if (!frame_parser->request_stack_height(address, height)){
 	return true;
+    }
+
 
     // othersize, get stackheight from stack analysis of dyninst
     if (cached_func != func->addr()){
