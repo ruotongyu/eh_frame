@@ -63,6 +63,7 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 		    // bin: do not consider indirect jump for now.
 		    case ParseAPI::COND_TAKEN:
 		    case ParseAPI::DIRECT:
+
 			target = succ->trg()->start();
 
 			if (getStackHeight(bb->lastInsnAddr(), func, bb, height)){
@@ -71,11 +72,13 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 			    if ((height == 8 || height == 4)){
 
 				// the target is already a function.
-				// skip it.
+				// skip.
 				if (all_funcs.find(target) != all_funcs.end()){
 				    continue;
 				}
 
+				// this is the targets of indirect jump.
+				// skip.
 				if (indirect_jump_targets.find(target) != indirect_jump_targets.end()){
 				    continue;
 				}
@@ -83,10 +86,10 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 				// there are other references to the target
 				if(targets.find(target) != targets.end()){
 #ifdef DEBUG_TAIL_CALL
-				std::cerr << "[Tail call detection]: at " << std::hex << succ->src()->start() << 
-				    ", the target " << succ->trg()->start() << " is a function!" << std::endl;
+					std::cerr << "[Tail call detection]: at " << std::hex << succ->src()->start() << 
+					    ", the target " << succ->trg()->start() << " is a function!" << std::endl;
 #endif
-				new_funcs.insert(target);
+					new_funcs.insert(target);
 
 				}
 			    } 
