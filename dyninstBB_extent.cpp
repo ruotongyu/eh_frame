@@ -589,7 +589,7 @@ int main(int argc, char** argv){
 
 	// tail call detection
 	std::map<uint64_t, uint64_t> merged_funcs;
-	tailCallAnalyzer* tailcall_ana = new tailCallAnalyzer(code_obj_eh.get(), &ref_2c, input_string);
+	tailCallAnalyzer* tailcall_ana = new tailCallAnalyzer(code_obj_eh.get(), &ref_2c, &pc_funcs, input_string);
 	tailcall_ana->analyze(merged_funcs);
 
 	dumpCFG(*code_obj_eh, pbModule, merged_funcs);

@@ -13,6 +13,7 @@ class tailCallAnalyzer{
 	ParseAPI::CodeObject* codeobj;
 	std::map<uint64_t, uint64_t>* refs;
 	FrameParser *frame_parser;
+	std::map<uint64_t, uint64_t>* funcs_range;
 
 	uint64_t cached_func;
 	StackAnalysis* cached_sa;
@@ -20,7 +21,7 @@ class tailCallAnalyzer{
 	bool getStackHeight(uint64_t address, ParseAPI::Function* func, ParseAPI::Block* block, int32_t& height);
 
     public:
-	tailCallAnalyzer(ParseAPI::CodeObject* co, std::map<uint64_t, uint64_t>* refs, const char* f_path);
+	tailCallAnalyzer(ParseAPI::CodeObject* co, std::map<uint64_t, uint64_t>* refs, std::map<uint64_t, uint64_t>* funcs_range, const char* f_path);
 	void analyze(std::map<uint64_t, uint64_t>&);
 	virtual ~tailCallAnalyzer();
 

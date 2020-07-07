@@ -4,9 +4,10 @@
 
 #define DEBUG_TAIL_CALL
 
-tailCallAnalyzer::tailCallAnalyzer(ParseAPI::CodeObject* _co, std::map<uint64_t, uint64_t>* _refs, const char* _f_path){
+tailCallAnalyzer::tailCallAnalyzer(ParseAPI::CodeObject* _co, std::map<uint64_t, uint64_t>* _refs, std::map<uint64_t, uint64_t>* _funcs_range, const char* _f_path){
     codeobj = _co;
     refs = _refs;
+    funcs_range = _funcs_range;
     cached_func = 0;
     cached_sa = 0;
     frame_parser = new FrameParser(_f_path);
@@ -26,6 +27,9 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
     std::set<uint64_t> new_funcs;
     std::set<uint64_t> deleted_funcs;
     std::set<uint64_t> indirect_jump_targets;
+    
+    uint64_t cur_func_addr;
+    int64_t cur_func_end;
 
     int32_t height;
     uint64_t target;
@@ -53,18 +57,36 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 
     // iterate all jump edges
     for(auto func: codeobj->funcs()){
+
+	cur_func_addr = func->addr();
+	
+	auto tmp_func_iter = funcs_range->find(cur_func_addr);
+
+	if(tmp_func_iter != funcs_range->end()){
+	    cur_func_end = tmp_func_iter->second;
+	}else{
+	    cur_func_end = -1;
+	}
+
 	for(auto bb: func->blocks()){
 	    for(auto succ: bb->targets()){
 
 		if (succ->trg()->start() == 0xffffffffffffffff)
 		    continue;
 
+		target = succ->trg()->start();
+
+		// if target in the range of current function
+		// skip
+		if (cur_func_end != -1 && 
+			target >= cur_func_addr && target < cur_func_end){
+		    continue;
+		}
+
 		switch(succ->type()){
 		    // bin: do not consider indirect jump for now.
 		    case ParseAPI::COND_TAKEN:
 		    case ParseAPI::DIRECT:
-
-			target = succ->trg()->start();
 
 			if (getStackHeight(bb->lastInsnAddr(), func, bb, height)){
 
