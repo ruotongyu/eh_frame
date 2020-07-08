@@ -34,9 +34,6 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
     int32_t height;
     uint64_t target;
 
-    for (auto ref: *refs){
-	targets.insert(ref.second);
-    }
 
     // find the target of call instructions
     for(auto func: codeobj->funcs()){
@@ -53,6 +50,14 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 		}
 	    }
 	}
+    }
+
+    for (auto ref: *refs){
+
+	if (indirect_jump_targets.find(ref.second) != indirect_jump_targets.end())
+	    continue;
+
+	targets.insert(ref.second);
     }
 
     // iterate all jump edges
@@ -87,7 +92,7 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 		    // bin: do not consider indirect jump for now.
 		    case ParseAPI::COND_TAKEN:
 		    case ParseAPI::DIRECT:
-
+		    case ParseAPI::INDIRECT:
 			if (getStackHeight(bb->lastInsnAddr(), func, bb, height)){
 
 #ifdef DEBUG_TAIL_CALL
@@ -99,12 +104,6 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 				// the target is already a function.
 				// skip.
 				if (all_funcs.find(target) != all_funcs.end()){
-				    continue;
-				}
-
-				// this is the targets of indirect jump.
-				// skip.
-				if (indirect_jump_targets.find(target) != indirect_jump_targets.end()){
 				    continue;
 				}
 
