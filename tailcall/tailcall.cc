@@ -90,6 +90,9 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 
 			if (getStackHeight(bb->lastInsnAddr(), func, bb, height)){
 
+#ifdef DEBUG_TAIL_CALL
+			    std::cerr << "[Tail call detection]: The height in " << std::hex << bb->lastInsnAddr() << " : " << height << std::endl;
+#endif
 			    // check if the height of stack is balanced
 			    if ((height == 8 || height == 4)){
 
@@ -131,6 +134,11 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 				}
 			    }
 			} // end if(getStackHeight...)
+			else{
+#ifdef DEBUG_TAIL_CALL
+			    std::cerr << "[Tail call detection]: Can't get height of address " << std::hex << bb->lastInsnAddr() << std::endl;
+#endif
+			}
 			break;
 		}
 	    }
