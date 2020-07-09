@@ -11,6 +11,7 @@ tailCallAnalyzer::tailCallAnalyzer(ParseAPI::CodeObject* _co, std::map<uint64_t,
     cached_func = 0;
     cached_sa = 0;
     frame_parser = new FrameParser(_f_path);
+    f_path = _f_path;
 }
 
 tailCallAnalyzer::~tailCallAnalyzer(){
@@ -135,7 +136,7 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 			} // end if(getStackHeight...)
 			else{
 #ifdef DEBUG_TAIL_CALL
-			    std::cerr << "[Tail call detection]: Can't get height of address " << std::hex << bb->lastInsnAddr() << std::endl;
+			    std::cerr << "[Tail call detection]: at file " << f_path << "Can't get height of address " << std::hex << bb->lastInsnAddr() << " to " << target << std::endl;
 #endif
 			}
 			break;

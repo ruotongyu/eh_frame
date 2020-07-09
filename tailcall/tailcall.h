@@ -14,6 +14,7 @@ class tailCallAnalyzer{
 	std::map<uint64_t, uint64_t>* refs;
 	FrameParser *frame_parser;
 	std::map<uint64_t, uint64_t>* funcs_range;
+	const char* f_path;
 
 	uint64_t cached_func;
 	StackAnalysis* cached_sa;
