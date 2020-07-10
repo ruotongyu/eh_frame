@@ -1,8 +1,12 @@
 #include "tailcall.h"
 #include "CFG.h"
+#include "Symtab.h"
+#include "CodeSource.h"
 #include <vector>
 
 #define DEBUG_TAIL_CALL
+
+extern bool CallingConvensionCheck(ParseAPI::Function*);
 
 tailCallAnalyzer::tailCallAnalyzer(ParseAPI::CodeObject* _co, std::map<uint64_t, uint64_t>* _refs, std::map<uint64_t, uint64_t>* _funcs_range, const char* _f_path){
     codeobj = _co;
@@ -28,6 +32,10 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
     std::set<uint64_t> new_funcs;
     std::set<uint64_t> deleted_funcs;
     std::set<uint64_t> indirect_jump_targets;
+
+    ParseAPI::CodeObject* code_obj_tmp = nullptr;
+    ParseAPI::SymtabCodeSource* symtab_cs_tmp = nullptr;
+    ParseAPI::Function* entry_f = nullptr;
     
     uint64_t cur_func_addr;
     int64_t cur_func_end;
@@ -146,11 +154,35 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
     }
 
     for (auto func_addr: new_funcs){
+
+	entry_f = nullptr;
+	symtab_cs_tmp = new ParseAPI::SymtabCodeSource(const_cast<char*>(f_path));
+	code_obj_tmp = new ParseAPI::CodeObject(symtab_cs_tmp, NULL, NULL, false, true);
+
+	code_obj_tmp->parse(func_addr, true);
+	code_obj_tmp->finalize();
+
+	for (auto cur_f: code_obj_tmp->funcs()){
+	    if (func_addr == cur_f->addr()){
+		entry_f = cur_f;
+		break;
+	    }
+	}
+
+	// calling convension checking
+	if (!entry_f || !CallingConvensionCheck(entry_f)){
+	    continue;
+	}
+	
 #ifdef DEBUG_TAIL_CALL
 	std::cerr << "[Tail call detection]: create a new function at " 
 	    << std::hex << func_addr << std::endl;
 #endif
+
 	codeobj->parse(func_addr, false);
+
+	delete code_obj_tmp;
+	delete symtab_cs_tmp;
     }
 
     // TODO. find a better way to merge these functions
