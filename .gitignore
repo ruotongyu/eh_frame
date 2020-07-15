@@ -9,3 +9,5 @@ dyninstBB_ehframe
 dyninstBB_extent
 dyninstExtend
 .gdb_history
+__pycache__
+*.log
