@@ -590,7 +590,8 @@ int main(int argc, char** argv){
 	// tail call detection
 	std::map<uint64_t, uint64_t> merged_funcs;
 	tailCallAnalyzer* tailcall_ana = new tailCallAnalyzer(code_obj_eh.get(), &ref_2c, &pc_funcs, input_string);
-	tailcall_ana->analyze(merged_funcs);
+	// false means do not use ehframe to get stack height
+	tailcall_ana->analyze(merged_funcs, false);
 
 	dumpCFG(*code_obj_eh, pbModule, merged_funcs);
 	auto output_file = const_cast<char* >(output_string);

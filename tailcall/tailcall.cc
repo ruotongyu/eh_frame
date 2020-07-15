@@ -25,7 +25,7 @@ tailCallAnalyzer::~tailCallAnalyzer(){
 	delete cached_sa;
 }
 
-void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
+void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs, bool use_ehframe){
     std::set<uint64_t> targets;
     std::map<uint64_t, ParseAPI::Function*> all_funcs;
 
@@ -102,7 +102,7 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 		    case ParseAPI::COND_TAKEN:
 		    case ParseAPI::DIRECT:
 		    case ParseAPI::INDIRECT:
-			if (getStackHeight(bb->lastInsnAddr(), func, bb, height)){
+			if (getStackHeight(bb->lastInsnAddr(), func, bb, height, use_ehframe)){
 
 #ifdef DEBUG_TAIL_CALL
 			    std::cerr << "[Tail call detection]: The height in " << std::hex << bb->lastInsnAddr() << " : " << height << std::endl;
@@ -209,14 +209,16 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs){
 
 }
 
-bool tailCallAnalyzer::getStackHeight(uint64_t address, ParseAPI::Function* func, ParseAPI::Block* block, int32_t& height){
+bool tailCallAnalyzer::getStackHeight(uint64_t address, ParseAPI::Function* func, ParseAPI::Block* block, int32_t& height, bool use_ehframe){
     bool ret_result = false;
     std::stringstream ss;
     std::vector<std::pair<Absloc, StackAnalysis::Height>> heights;
 
-    // request stack height from ehframe first
-    if (!frame_parser->request_stack_height(address, height)){
-	return true;
+    if (use_ehframe){
+	    // request stack height from ehframe first
+	    if (!frame_parser->request_stack_height(address, height)){
+		return true;
+	    }
     }
 
 
