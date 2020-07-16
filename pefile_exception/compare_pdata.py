@@ -6,7 +6,7 @@ logging.basicConfig(level = logging.INFO)
 
 def parseFuncsFromExcInfo(binary, image_base):
     rand_output = randomString()
-    cmd = "llvm-objdump -u %s | grep 'Start Address:' > /tmp/%s" % (binary, rand_output)
+    cmd = "llvm-objdump -u %s > /tmp/%s" % (binary, rand_output)
     rm_cmd = "rm /tmp/%s" % (rand_output)
     result = set()
     try:
@@ -16,11 +16,19 @@ def parseFuncsFromExcInfo(binary, image_base):
         os.system(rm_cmd)
         return result
 
+    last_func_addr = 0x0
     with open('/tmp/%s' % (rand_output), 'r') as exc_funcs:
         for line in exc_funcs:
-            cur_func = int(line.split(' ')[-1], 16) + image_base
-            logging.debug("Exc Info Func: 0x%x" % cur_func)
-            result.add(cur_func)
+            if 'Start Address:' in line:
+                last_func_addr = int(line.split(' ')[-1], 16) + image_base
+                continue
+
+            if 'Flags' in line:
+                if 'UNW_ChainInfo' in line:
+                    last_func_addr = 0x0
+                else:
+                    logging.debug("Exc Info Func: 0x%x" % last_func_addr)
+                    result.add(last_func_addr)
     os.system(rm_cmd)
     return result
 
