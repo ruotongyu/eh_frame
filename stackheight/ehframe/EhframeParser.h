@@ -84,9 +84,14 @@ class FrameParser{
 	bool get_stack_height(Dwarf_Debug&, Dwarf_Fde&, Dwarf_Addr, Dwarf_Error*, signed&);
 
 	bool parse_one_regentry(struct Dwarf_Regtable_Entry3_s*, signed&);
+
+
+	signed _fde_cnt;
+	signed _fde_stack_height_cnt;
     
     public:
 	FrameParser(const char* f_path);
+	void summary();
 
 	// ret val:
 	// HEIGHT_ERROR_CANT_FIND: can't find eh_frame that contains cur_addr

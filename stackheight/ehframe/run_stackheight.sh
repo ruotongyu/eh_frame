@@ -18,7 +18,7 @@ cur_dir=`dirname $0`
 tool_path=${cur_dir}/EhStackHeight
 
 
-for file in `find ${DIR} -name "ehRes_*"`; do
+for file in `find ${DIR} -name "ehRes_*" | grep O1`; do
     binary_path=${file//ehRes_/}
     binary_path=${binary_path//\.pb/\.strip}
     output_path=${file//ehRes_/ehStackHeight_}

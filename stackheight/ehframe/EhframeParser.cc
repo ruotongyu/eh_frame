@@ -13,6 +13,13 @@
 
 using namespace std;
 
+void FrameParser::summary(){
+    cerr << "================summary================" << endl;
+    cerr << "The number of FDEs is " << _fde_cnt << endl;
+    cerr << "The number of FDEs that has the information of stack height is " << _fde_stack_height_cnt << endl;
+    cerr << endl;
+}
+
 FrameParser::FrameParser(const char* f_path){
     int fd = -1;
     int res = DW_DLV_ERROR;
@@ -28,6 +35,9 @@ FrameParser::FrameParser(const char* f_path){
         std::cerr << "Can't open the file " << f_path << endl; 
 	exit(-1);
     }
+
+    _fde_cnt = 0;
+    _fde_stack_height_cnt = 0;
 
     res = dwarf_init_b(fd, DW_DLC_READ, DW_GROUPNUMBER_ANY,
 	    errhand, errarg, &_dbg, &error);
@@ -210,7 +220,7 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Signed fde_num
     cerr << " FDE: " << hex << lowpc << " -> " << lowpc + func_length << endl; 
 #endif
 
-    // TODO. binpang. parse its parent CIE
+    _fde_cnt++;
 
     if (res != DW_DLV_OK) {
 	cerr << "Problem getting fde range " << endl;
@@ -246,7 +256,10 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Signed fde_num
 #ifdef DWARF_DEBUG
 	cerr << "In func " << hex << lowpc <<  ", the definion of cfa is not defined by rsp/esp!" << endl; 
 #endif
+    } else {
+	_fde_stack_height_cnt++;
     }
+
     frames.insert(FrameData(lowpc, is_sp_based, func_length, fde_num));
 
     dwarf_dealloc(dbg, frame_op_array, DW_DLA_FRAME_BLOCK);
