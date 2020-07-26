@@ -93,22 +93,20 @@ bool Inst_help(Dyninst::ParseAPI::CodeObject &codeobj, set<unsigned>& all_instru
 std::set<uint64_t> CheckInst(set<Address>& addr_set, char* input_string, set<unsigned>& instructions, map<unsigned long, unsigned long>& gap_regions, set<uint64_t>& known_func, blocks::module &pbModule, set<uint64_t> &nops_inst, map<uint64_t, uint64_t> DataRef, map<uint64_t, uint64_t> CodeRef, set<uint64_t> &invalid_inst) {
 
 	std::set<uint64_t> filted_funcs;
-	std::set<uint64_t> visited_funcs;
 
 	//ParseAPI::SymtabCodeSource* symtab_cs = new SymtabCodeSource(input_string);
 	ParseAPI::CodeObject* code_obj_gap = nullptr;
 	ParseAPI::SymtabCodeSource* symtab_cs = nullptr;
 	symtab_cs = new SymtabCodeSource(input_string);
-	code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, true);
-	CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
-
 	for (auto addr: addr_set){
 		//auto code_obj_gap = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, false);
 		//code_obj_gap = new ParseAPI::CodeObject(symtab_cs);
+		code_obj_gap = new ParseAPI::CodeObject(symtab_cs, NULL, NULL, false, true);
+		CHECK(code_obj_gap) << "Error: Fail to create ParseAPI::CodeObject";
 
 		code_obj_gap->parse(addr, true);
-
+		code_obj_gap->finalize();
 		if (Inst_help(*code_obj_gap, instructions, gap_regions, invalid_inst)){
 #ifdef DEBUG_DISASSEMBLE
 			cout << "Disassembly Address is 0x" << hex << addr << endl;
@@ -131,12 +129,9 @@ std::set<uint64_t> CheckInst(set<Address>& addr_set, char* input_string, set<uns
 			for (auto r_f : code_obj_gap->funcs()){
 				uint64_t func_addr = (uint64_t) r_f->addr();
 
-				if (visited_funcs.count(func_addr) || 
-						known_func.count(func_addr) || nops_inst.count(func_addr)){
+				if (known_func.count(func_addr) || nops_inst.count(func_addr)){
 					continue;
 				}
-
-				visited_funcs.insert(func_addr);
 
 				int inst_num = 0;
 				bool NopFunc = false;
@@ -157,9 +152,8 @@ std::set<uint64_t> CheckInst(set<Address>& addr_set, char* input_string, set<uns
 				}
 			}
 		}
+		delete code_obj_gap;
 	}
-
-	delete code_obj_gap;
 	delete symtab_cs;
 	return filted_funcs;
 }
@@ -504,10 +498,13 @@ int main(int argc, char** argv){
 
 	getEhFrameAddrs(eh_functions, input_string, pc_funcs);
 	auto symtab_cs = std::make_shared<ParseAPI::SymtabCodeSource>(input_string);
-	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
+
+	auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get(), nullptr , nullptr , false, true);
+	//auto code_obj_eh = std::make_shared<ParseAPI::CodeObject>(symtab_cs.get());
 	
 	//set<uint64_t> raw_fn_functions = compareFunc(eh_functions, gt_functions, false);
 	CHECK(code_obj_eh) << "Error: Fail to create ParseAPI::CodeObject";
+
 	code_obj_eh->parse();
 	uint64_t file_offset = symtab_cs->loadAddress();
 	for(auto addr : eh_functions){
@@ -583,10 +580,8 @@ int main(int argc, char** argv){
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	//set<uint64_t> nops;
-
-	//cout << "Size of Ref in Gap" << dec << RefinGap.size() << endl;
-
 	auto new_funcs = CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule, nops_inst, DataRefMap, ref_addr, invalid_inst);	
+
 	for (auto cur_addr : new_funcs){
 		code_obj_eh->parse(cur_addr, true);
 	}
@@ -594,8 +589,6 @@ int main(int argc, char** argv){
 	auto ref_2c = CCReference(*code_obj_eh, regs, instructions);
 	auto ref_d2c = DCReference(data_regs, regs, file_offset, input_string, x64, instructions);
 	ref_2c.insert(ref_d2c.begin(), ref_d2c.end());
-
-
 
 	// tail call detection
 	std::map<uint64_t, uint64_t> merged_funcs;
