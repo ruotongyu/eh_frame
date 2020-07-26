@@ -52,7 +52,7 @@ if [ ! -f $TOOL ]; then
   exit -1
 fi
 
-for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v O0 | grep -v O2 | grep -v O3 | grep -v Os | grep -v Of | grep -v _m32 | grep -v ida_ | grep -v shuffle`; do
+for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep O2 | grep -v _m32 | grep -v ida_ | grep -v shuffle`; do
   #echo "current to be handled file is $file"
   replace_tmp1=${file//strip_/}
   binary_file=${replace_tmp1//\.strip/}
@@ -61,7 +61,15 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   tmp2=${tmp1}_strip
   sdir=${dir_name/$tmp1/$tmp2}
   base_name=`basename $binary_file`
-  output=${sdir}/Block-angrBB_Stack-${base_name}.pb
+  if [ $base_name = "libc-2.27.so" ]; then
+	  continue
+  fi
+  ehname=${sdir}/Block-dyninstBB_ehframe-${base_name}.strip.pb
+  gtBlock_file=${dir_name}/gtBlock_${base_name}.pb
+  ref=${dir_name}/gtRef_${base_name}.pb
+  TailCall_file=${dir_name}/ehTailCall_${base_name}.pb
+  #gtBlock_file=${replace_tmp//Block-$PREFIX-/gtBlock_}
+  
   optimized_dir=`echo $file | rev | cut -d '/' -f2 | rev`
   #echo "optimized dir is $optimized_dir"
   #echo "groundtruth file is $gtBlock_file"
@@ -79,6 +87,7 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
 
 
   pure_binary_file=`basename $binary_file`
+  output_path="$OUTPUT/data@testsuite@$last_dir$utils_dir@$optimized_dir@$pure_binary_file"
   #echo "output path is $output_path"
 
   if [ ! -f $binary_file ]; then
@@ -86,8 +95,13 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
     continue
   fi
 
+  if [ -f $output_path -a $NEW -eq 0 ]; then
+    echo "already compare it!, skip!"
+    continue
+  fi
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
-  echo "python3 $TOOL -b $binary_file -o $output"
-  python3 $TOOL -b $binary_file -o $output
+  echo "[Handle File]: $binary_file"
+  #echo "timeout 1h python3 $TOOL -g $gtBlock_file -i $TailCall_file -b $binary_file -e $ehname -r $ref"
+  timeout 1h python3 $TOOL -g $gtBlock_file -i $TailCall_file -e $ehname -b $binary_file -r $ref
 done

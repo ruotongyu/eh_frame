@@ -18,7 +18,7 @@ protobuf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../pr
 # sys.path.append("../protobuf_def")
 sys.path.append(protobuf_path)
 # sys.path.append("./protobuf_def")
-import stackheight_pb2
+from proto import stackheight_pb2
 
 textAddr = 0
 textSize = 0
@@ -98,7 +98,6 @@ def compareHeight(ehframe, angr, tool):
     for key in ehStack.keys():
         if key not in toolStack.keys():
             FN+=1
-            #print()
 
 
     opt = ehframe.split("/")

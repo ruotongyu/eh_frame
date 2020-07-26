@@ -143,9 +143,11 @@ def compareFuncs(groundTruth, compared, ehFuncs, RawEhFuncs, ScanBB, gtRef):
     eh_fn = set()
     scan_fn = set()
     fn_funcs = set()
+    linker_funcs = set()
     for func in groundTruth:
         if func not in RawEhFuncs.keys():
             if func in linkerFuncAddr:
+                linker_funcs.add(func)
                 linker_num += 1
             elif func in pcThunkAddr:
                 pcthunk_num += 1
@@ -164,7 +166,11 @@ def compareFuncs(groundTruth, compared, ehFuncs, RawEhFuncs, ScanBB, gtRef):
             scan_fn.add(func)
             #logging.error("[Scan False Negitive #{0}]:Function Start 0x{1:x} not in compared.".format(scan_fn_num, func))
             scan_fn_num+=1
-    
+    linker_found = 0
+    for func in linker_funcs:
+        if func in compared:
+            linker_found += 1
+
     FNInCode = 0
     FNInGap = 0
     fn_Gaps = set()
@@ -202,7 +208,7 @@ def compareFuncs(groundTruth, compared, ehFuncs, RawEhFuncs, ScanBB, gtRef):
     print("[Result]:The total FN Functions in Gap Ranges is %d" % (FNInGap))
     print("[Result]:The total FN Functions in Gap Ranges With Reference %d" % (WithRef_num))
     print("[Result]:The total FN Functions in Gap Ranges WithOut Reference %d" % (NoRef_num))
-    #print("[Result]:Linker Function number is %d" % (linker_num))
+    print("[Result]:The total Linker Function found is %d" % (linker_found))
     #print("[Result]:Extra False positive number is %d" % (falsePositive))
     #print("[Result]:Identified Function number is %d" % (found))
     #print("[Result]:False negative number is %d" % (falseNegitive))
@@ -220,6 +226,8 @@ def getBBRange(mModule):
             bb_end = 0
             for inst in bb.instructions:
                 bb_end = inst.va + inst.size
+            print(hex(bb_start), hex(bb_end))
+            exit(1)
             BBRange[bb_start] = bb_end
     return BBRange
 
@@ -395,14 +403,6 @@ if __name__ == '__main__':
         f3.close()
     except IOError:
         print("Hello", options.ehframe)
-        print("Could not open the ehframe file\n")
-        exit(-1)
-    try:
-        f4 = open(options.ref, 'rb')
-        mModule4.ParseFromString(f4.read())
-        f4.close()
-    except IOError:
-        print("Hello", options.ref)
         print("Could not open the ehframe file\n")
         exit(-1)
     truthFuncs = readFuncs(mModule1, True)

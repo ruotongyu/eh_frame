@@ -2,7 +2,8 @@
 
 
 if __name__ == "__main__":
-    f = open('/home/binpang/Desktop/Result/servers.fn', 'r')
+    #f = open('/home/binpang/Desktop/Result/clients.fn_notailcall_x64', 'r')
+    f = open('/tmp/tailcall_servers.fn_O0')
     raw_num = 0
     func_num = 0
     eh_num = 0
@@ -11,14 +12,23 @@ if __name__ == "__main__":
     NoRef = 0
     linker = 0
     pcThunk = 0
+    file_num = 0
+    tmp = False
     for line in f:
         string = str(line).split(" ")
-        if len(string) > 6:
+        if "Handle File" in str(line):
+            if "_O0" in str(line):
+                tmp = True
+            else:
+                tmp = False
+
+        if len(string) > 6 and tmp:
             if string[2] == "Functions":
                 func_num += int(string[7].strip())
+                file_num += 1
             if string[5] == "raw":
                 raw_num += int(string[8].strip())
-            if string[5] == "linker":
+            if string[5] == "linker" :
                 linker += int(string[7].strip())
             if string[5] == "pcThunk":
                 pcThunk += int(string[7].strip())
@@ -40,6 +50,7 @@ if __name__ == "__main__":
     print("Total number of FN functions:", scan_num)
     print("Total number of FN in Gaps With Ref:", WithRef)
     print("Total number of FN in Gaps Without Ref:", NoRef)
+    print("Total number of File:", file_num)
 
 
 

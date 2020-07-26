@@ -52,7 +52,7 @@ if [ ! -f $TOOL ]; then
   exit -1
 fi
 
-for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v O1 | grep -v ccr_ | grep -v _m32 | grep -v ida_ | grep -v shuffle`; do
+for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v O0 | grep -v _m32 | grep -v ida_ | grep -v shuffle`; do
   #echo "current to be handled file is $file"
   replace_tmp1=${file//strip_/}
   binary_file=${replace_tmp1//\.strip/}
@@ -69,7 +69,6 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   gtBlock_file=${dir_name}/gtBlock_${base_name}.pb
   ref=${dir_name}/gtRef_${base_name}.pb
   ehRes_file=${dir_name}/ehRes_${base_name}.pb
-  ehframe=${dir_name}/ehRes_${base_name}.pb
   #gtBlock_file=${replace_tmp//Block-$PREFIX-/gtBlock_}
   
   optimized_dir=`echo $file | rev | cut -d '/' -f2 | rev`
