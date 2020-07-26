@@ -114,10 +114,7 @@ def readFuncsFromSyms(binary):
                 result.add(sym['st_value'])
                 if sym.name in LINKER_ADDED_FUNCS:
                     BLACKLIST_ADDRS.add(sym['st_value'])
-
-
     return result
-
 
 def randomString(stringLength=10):
     """Generate a random string of fixed length """
@@ -135,54 +132,33 @@ BASE_ADDR_MAP = {"angr": 0x400000, "ghidra": 0x100000}
 disassembler_base_addr = 0x0
 PIE = False
 
-def compareFuncs(groundTruth, compared, ehFuncs, gtRef, binary, JumpAddr, BB_dict):
-    EhFPFuncs = set()
-    ehFPNum = 0
-    for func in ehFuncs:
-        if func in linkerFuncAddr or func in pcThunkAddr:
+def compareFuncs(ScanBB):
+    gaps = {}
+    index = 0
+    prev_end = -1
+    for bb in sorted(ScanBB.keys()):
+        if bb >= textAddr + textSize or bb < textAddr:
             continue
-        if func not in groundTruth:
-            EhFPFuncs.add(func)
-            #logging.error("[False Positive in Ehframe Disassembling #{0}]:Function Start 0x{1:x} not in compared.".format(ehFPNum, func))
-            ehFPNum += 1
+        
+        if index==0 and bb > textAddr:
+            if bb - textAddr >= 16:
+                gaps[textAddr] = bb
+        if prev_end != -1 and bb > prev_end:
+            if bb - prev_end >= 16:
+                gaps[prev_end] = bb
+        prev_end = ScanBB[bb]
+        index+=1
+    if prev_end < textAddr + textSize:
+        if textAddr + textSize - prev_end >= 16:
+            gaps[prev_end] = textAddr + textSize
+    #for gp in sorted(gaps.keys()):
+    #    print("gaps", hex(gp), hex(gaps[gp]))
+    print("[Result]:Number of Gaps is %d" % (len(gaps)))
+    #print("[Result]:Identified Function number is %d" % (found))
+    #print("[Result]:False negative number is %d" % (falseNegitive))
 
-    ScanFunc = set()
-    for func in compared:
-        if func in linkerFuncAddr or func in pcThunkAddr:
-            continue
-        #if func not in ehFuncs:
-        ScanFunc.add(func)
-    fpNum = 0
-    tailNum = 0
-    for func in ScanFunc:
-        if func not in groundTruth:
-            fpNum += 1
-            if func in ehFuncs:
-                logging.error("[False Positive in EhFrame #{0}]:Function Start 0x{1:x} not in compared.".format(fpNum, func))
-            else:
-            #if isFuncInBasicBlock(func, BB_dict):
-                logging.error("[False Positive in Ref Disassembling #{0}]:Function Start 0x{1:x} not in compared.".format(fpNum, func))
-                tailNum += 1
-            #else:
-             #   logging.error("[False Positive Data in Code #{0}]:Function Start 0x{1:x} not in compared.".format(dataNum, func))
-              #  dataNum += 1
-
-    #jumpNum = 0
-    #for func in fpFunctions:
-     #   if func in JumpAddr:
-      #      logging.error("[False Positive caused by Jump #{0}]:Function Start 0x{1:x} not in compared.".format(jumpNum, func))
-       #jumpNum += 1
-
-    print("[Handle File]: ", binary)
-    print("[Result]:The total Functions in ground truth is %d" % (len(groundTruth)))
-    print("[Result]:The total FP Functions in EhFrame Disassembling is %d" % (ehFPNum))
-    print("[Result]:The total FP Functions in Reference Disassembling is %d" % (fpNum))
-    print("[Result]:The total FP Functions caused by TailCall is %d" % (tailNum))
-
-
-
-def getJumpAddr(mModule):
-    JumpAddr = set()
+def getBBRange(mModule):
+    BBRange = {}
     for func in mModule.fuc:
         if func.va == 0x0:
             continue
@@ -190,10 +166,12 @@ def getJumpAddr(mModule):
         if not isInTextSection(funcAddr):
             continue
         for bb in func.bb:
-            if bb.type == 4 or bb.type == 5:
-                for child in bb.child:
-                    JumpAddr.add(child.va)
-    return JumpAddr
+            bb_start = bb.va
+            bb_end = 0
+            for inst in bb.instructions:
+                bb_end = inst.va + inst.size
+            BBRange[bb_start] = bb_end
+    return BBRange
 
 def getReference(refInf):
     refList = {}
@@ -201,23 +179,6 @@ def getReference(refInf):
         refList[ref.ref_va] = ref.target_va
     return refList
 
-def readBasicBlock(mModule):
-    bb_dict = {}
-    for func in mModule.fuc:
-        if func.va == 0x0:
-            continue
-        funcAddr = func.va
-        if not isInTextSection(funcAddr):
-            continue
-        for bb in func.bb:
-            bb_dict[bb.va] = bb.size + bb.padding
-    return bb_dict
-
-def isFuncInBasicBlock(func, BB_dict):
-    for bb in BB_dict:
-        if func >= bb and func <= (bb + BB_dict[bb]):
-            return True
-    return False       
 
 def readFuncs(mModule, groundTruth):
     """
@@ -327,49 +288,25 @@ def readFuncsFromEhFrame(binary):
 
 if __name__ == '__main__':
     parser = optparse.OptionParser()
-    parser.add_option("-g", "--groundtruth", dest = "groundtruth", action = "store", \
-            type = "string", help = "ground truth file path", default = None)
+    #parser.add_option("-g", "--groundtruth", dest = "groundtruth", action = "store", \
+    #        type = "string", help = "ground truth file path", default = None)
     parser.add_option("-i", "--input", dest = "input", action = "store", \
             type = "string", help = "compared file path", default = None)
     parser.add_option("-b", "--binaryFile", dest = "binaryFile", action = "store", \
             type = "string", help = "binary file path", default = None)
-    parser.add_option("-e", "--ehframe", dest = "ehframe", action = "store", \
-            type = "string", help = "binary file path", default = None)
-    parser.add_option("-r", "--ref", dest = "ref", action = "store", \
-            type = "string", help = "reference file path", default = None)
+    #parser.add_option("-e", "--ehframe", dest = "ehframe", action = "store", \
+    #        type = "string", help = "ehframe file path", default = None)
+    #parser.add_option("-r", "--ref", dest = "ref", action = "store", \
+    #        type = "string", help = "reference file path", default = None)
 
     (options, args) = parser.parse_args()
 
-    assert options.groundtruth != None, "Please input the ground truth file!"
     assert options.input!= None, "Please input the compared file!"
     assert options.binaryFile != None, "Please input the binary file!"
-    assert options.ehframe != None, "Please input the ehframe file!"
-    assert options.ref != None, "Please input the ref file!"
     strip_binary = str(options.binaryFile) + ".strip"
     readTextSection(options.binaryFile)
     logging.debug("compared file is %s" % options.binaryFile)
-    getLinkerFunctionAddr(options.binaryFile)
-    mModule1 = blocks_pb2.module()
     mModule2 = blocks_pb2.module()
-    mModule3 = blocks_pb2.module()
-    mModule4 = blocks_pb2.module()
-    refInf1 = refInf_pb2.RefList()
-    try:
-        r1 = open(options.ref, 'rb')
-        refInf1.ParseFromString(r1.read())
-        r1.close()
-    except IOError:
-        print(options.ref)
-        print("Could not open reference file\n")
-        exit(-1)
-    try:
-        f1 = open(options.groundtruth, 'rb')
-        mModule1.ParseFromString(f1.read())
-        f1.close()
-    except IOError:
-        print(options.groundtruth)
-        print("Could not open Ground Truth file\n")
-        exit(-1)
     try:
         f2 = open(options.input, 'rb')
         mModule2.ParseFromString(f2.read())
@@ -378,31 +315,16 @@ if __name__ == '__main__':
         print(options.input)
         print("Could not open the input file\n")
         exit(-1)
-    try:
-        f3 = open(options.ehframe, 'rb')
-        mModule3.ParseFromString(f3.read())
-        f3.close()
-    except IOError:
-        print(options.ehframe)
-        print("Could not open the ehframe file\n")
-        exit(-1)
-    try:
-        f4 = open(options.ref, 'rb')
-        mModule4.ParseFromString(f4.read())
-        f4.close()
-    except IOError:
-        print("Hello", options.ref)
-        print("Could not open the reference file\n")
-        exit(-1)
-    truthFuncs = readFuncs(mModule1, True)
     pbFuncs = readFuncs(mModule2, False)
-    ehFuncs = readFuncs(mModule3, False)
-    JumpAddr = getJumpAddr(mModule1)
-    BB_dict = readBasicBlock(mModule1)
-    gtRef = getReference(refInf1)
-    not_included = checkGroundTruthFuncNotIncluded(groundTruthFuncRange, options.binaryFile)
-    if not_included != None:
-        logging.debug("Append the not included functions! {0}".format(not_included))
-        truthFuncs |= not_included
+    ScanBB = getBBRange(mModule2)
     
-    compareFuncs(truthFuncs, pbFuncs, ehFuncs, gtRef, options.binaryFile, JumpAddr, BB_dict)
+    compareFuncs(ScanBB)
+    #for bb in ScanBB.keys():
+    #    print(hex(bb), hex(ScanBB[bb]))
+    #exit(1)
+    ##not_included = checkGroundTruthFuncNotIncluded(groundTruthFuncRange, options.binaryFile)
+    #if not_included != None:
+    #    logging.debug("Append the not included functions! {0}".format(not_included))
+    #    truthFuncs |= not_included
+    #RawEhFuncs = readFuncsFromEhFrame(strip_binary)
+

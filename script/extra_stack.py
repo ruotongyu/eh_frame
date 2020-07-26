@@ -1,11 +1,9 @@
 
-
-
 if __name__ == "__main__":
-    f = open('/tmp/dyninst_utils.log', 'r')
+    f = open('/tmp/dyninst_servers.log', 'r')
     #O0, O2, O3, Os, Of
     # true positive, false positve, unknown, false negative 
-    dic = {"gcc_O0":0, "gcc_O2":1, "gcc_O3":2, "gcc_Os":3, "gcc_Of":4, "gcc_m32_O0":5, "gcc_m32_O2":6, "gcc_m32_O3":7, "gcc_m32_Os":8, "gcc_m32_Of":9}
+    dic = {"gcc_O1":0, "gcc_O2":1, "gcc_O3":2, "gcc_Os":3, "gcc_Of":4, "gcc_m32_O1":5, "gcc_m32_O2":6, "gcc_m32_O3":7, "gcc_m32_Os":8, "gcc_m32_Of":9}
     opt_dict = []
     for i in range(10):
         opt_dict.append([0, 0, 0, 0, 0])

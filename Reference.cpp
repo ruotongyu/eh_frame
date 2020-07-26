@@ -73,14 +73,14 @@ map<uint64_t, uint64_t> DCReference(vector<SymtabAPI::Region *>& data_regs, vect
 	for (auto ref: RefMap){
 		if (ref.second >= textSec && ref.second < textSec + textSecSize){
 			if (instructions.count(ref.second) != 0) {
-				cout << "Code Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
+				//cout << "Code Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
 				res[ref.first] = ref.second;
 			} else {
-				cout << "Invalid Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
+				//cout << "Invalid Reference: " << hex << ref.first << ",  Target:" << ref.second << endl;
 			}
 		}
 	}
-	cout << res.size() << endl;
+	//cout << res.size() << endl;
 	return res;
 }
 
