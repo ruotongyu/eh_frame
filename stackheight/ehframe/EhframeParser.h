@@ -88,9 +88,10 @@ class FrameParser{
 
 	signed _fde_cnt;
 	signed _fde_stack_height_cnt;
+	const char* f_path;
     
     public:
-	FrameParser(const char* f_path);
+	FrameParser(const char*);
 	void summary();
 
 	// ret val:

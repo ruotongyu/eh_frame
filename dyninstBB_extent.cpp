@@ -505,11 +505,14 @@ int main(int argc, char** argv){
 	//set<uint64_t> raw_fn_functions = compareFunc(eh_functions, gt_functions, false);
 	CHECK(code_obj_eh) << "Error: Fail to create ParseAPI::CodeObject";
 
+	code_obj_eh->add_hints(eh_functions);
 	code_obj_eh->parse();
 	uint64_t file_offset = symtab_cs->loadAddress();
+	/*
 	for(auto addr : eh_functions){
 		code_obj_eh->parse(addr, true);
 	}
+	*/
 	
 	//DebugDisassemble(*code_obj_eh);
 	//pc_sets include all function start after recursive disassembling from ehframe

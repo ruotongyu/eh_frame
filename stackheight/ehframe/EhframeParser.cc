@@ -17,10 +17,13 @@ void FrameParser::summary(){
     cerr << "================summary================" << endl;
     cerr << "The number of FDEs is " << _fde_cnt << endl;
     cerr << "The number of FDEs that has the information of stack height is " << _fde_stack_height_cnt << endl;
+    cerr << "file path is " << f_path << ", rate is " << ((float)(_fde_stack_height_cnt)/(float)(_fde_cnt)) << endl;
     cerr << endl;
 }
 
-FrameParser::FrameParser(const char* f_path){
+FrameParser::FrameParser(const char* _f_path){
+
+    f_path = _f_path;
     int fd = -1;
     int res = DW_DLV_ERROR;
     int regtabrulecount = 0;
