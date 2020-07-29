@@ -54,10 +54,9 @@ def getLinkerFunctionAddr(binary):
             name = sym.name
             if 'STT_FUNC' != sym.entry['st_info']['type']:
                 continue
-            try:
-                name = cxxfilt.demangle(sym.name)
-            except:
-                continue
+
+            name = sym.name
+
             if name in linker_libc_func:
                 logging.debug("linker: %s: %x" % (name, sym['st_value']))
                 BLACKLIST.add(sym['st_value'])
@@ -74,7 +73,7 @@ BASE_ADDR_MAP = {"angr": 0x400000, "ghidra": 0x100000}
 disassembler_base_addr = 0x0
 PIE = False
 
-def compareFuncs(groundTruth, compared):
+def compareFuncs(groundTruth, compared, binary):
     """
     compare the jump tables
     """
@@ -110,6 +109,8 @@ def compareFuncs(groundTruth, compared):
     print("[Result]:The total Functions in linker is %d" % (sym_blacklist_num))
     print("[Result]:False positive number is %d" % (falsePositive))
     print("[Result]:False negitive number is %d" % (falseNegitive))
+    print("file %s, [Result]: Precision: %f" % (binary, (truePositive/len(compared))))
+    print("file %s, [Result]: Recall: %f" % (binary, (truePositive/(len(groundTruth) - sym_blacklist_num))))
 
 
 def readFuncs(mModule, groundTruth):
@@ -239,4 +240,4 @@ if __name__ == '__main__':
         logging.debug("Append the not included functions! {0}".format(not_included))
         truthFuncs |= not_included
     comparedFuncs = readFuncs(mModule2, False)
-    compareFuncs(truthFuncs, comparedFuncs)
+    compareFuncs(truthFuncs, comparedFuncs, options.binaryFile)

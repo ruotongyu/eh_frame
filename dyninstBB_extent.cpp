@@ -271,7 +271,7 @@ void dumpBlocks(blocks::Function* pbFunc, ParseAPI::Function* func, std::set<uin
 		Dyninst::ParseAPI::Block::Insns instructions;
 		block->getInsns(instructions);
 		unsigned cur_addr = block->start();
-		//cout << "Block Addr: " << hex << cur_addr << endl;
+	//	cout << "Block Addr: " << hex << cur_addr << endl;
 		for (auto p : instructions){
 			Dyninst::InstructionAPI::Instruction inst = p.second;
 			blocks::Instruction* pbInst = pbBB->add_instructions();
@@ -279,12 +279,12 @@ void dumpBlocks(blocks::Function* pbFunc, ParseAPI::Function* func, std::set<uin
 			pbInst->set_size(inst.size());
 
 			cur_addr += inst.size();
-			//cout << "Instruction Addr " << hex << cur_addr  << endl;
+	//		cout << "Instruction Addr " << hex << cur_addr  << endl;
 		}
 		for (auto succ: block->targets()){
 			blocks::Child* pbSuc = pbBB->add_child();
 			pbSuc->set_va(succ->trg()->start());
-			//cout << "successor: " << hex << succ->trg()->start() << endl;
+	//		cout << "successor: " << hex << succ->trg()->start() << endl;
 		}
 		}
 }

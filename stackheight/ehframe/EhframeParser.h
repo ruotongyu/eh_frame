@@ -10,6 +10,7 @@
 #define HEIGHT_ERROR_NOT_BASED_ON_SP -1
 #define HEIGHT_ERROR_CANT_FIND -2
 #define HEIGHT_ERROR -3
+#define HEIGHT_DOES_NOT_WORK_ERROR -4
 
 class FrameData{
     private:
@@ -89,6 +90,8 @@ class FrameParser{
 	signed _fde_cnt;
 	signed _fde_stack_height_cnt;
 	const char* f_path;
+
+	bool does_not_work;
     
     public:
 	FrameParser(const char*);

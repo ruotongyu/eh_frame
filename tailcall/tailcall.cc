@@ -27,6 +27,7 @@ tailCallAnalyzer::~tailCallAnalyzer(){
 
 void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs, bool use_ehframe){
     std::set<uint64_t> targets;
+    std::set<uint64_t> call_targets;
     std::map<uint64_t, ParseAPI::Function*> all_funcs;
 
     std::set<uint64_t> new_funcs;
@@ -53,6 +54,7 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs, bool 
 	    for(auto succ: bb->targets()){
 		if (succ->type() == ParseAPI::CALL){
 		    targets.insert(succ->trg()->start());
+		    call_targets.insert(succ->trg()->start());
 		} else if(succ->type() == ParseAPI::INDIRECT){
 		    // collect all indirect jump targets
 		    indirect_jump_targets.insert(succ->trg()->start());
@@ -107,11 +109,14 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs, bool 
 #ifdef DEBUG_TAIL_CALL
 			    std::cerr << "[Tail call detection]: The height in " << std::hex << bb->lastInsnAddr() << " : " << height << std::endl;
 #endif
+			    bool condition1 = false;
 			    // check if the height of stack is balanced
 			    if ((height == 8 || height == 4)){
 
+				condition1 = true;
 				// the target is already a function.
 				// skip.
+
 				if (all_funcs.find(target) != all_funcs.end()){
 				    continue;
 				}
@@ -123,28 +128,27 @@ void tailCallAnalyzer::analyze(std::map<uint64_t, uint64_t>& merged_funcs, bool 
 					    ", the target " << succ->trg()->start() << " is a function!" << std::endl;
 #endif
 					new_funcs.insert(target);
-
-				}
+				} 
+				
 			    } 
 
-			    else{
+			    if (all_funcs.find(target) != all_funcs.end() && call_targets.find(target) == call_targets.end()){
 				// detect non-continues 'function' caused by the entry in ehframe
-				// firstly, the stack height is not equal to 0
+				// firstly, the stack height is not equal to 0 or
 				// secondly, there is no referecnes to the target except for current jump
-				if(all_funcs.find(target) != all_funcs.end() 
-					&& targets.find(target) == targets.end()){
+				if(!condition1 || targets.find(target) == targets.end()){
 #ifdef DEBUG_TAIL_CALL
-				std::cerr << "[Tail call detection]: merge function at " << std::hex << succ->trg()->start() << 
-				    " to function " << func->addr() << "!" << std::endl;
+				    std::cerr << "[Tail call detection]: merge function at " << std::hex << succ->trg()->start() << 
+					" to function " << func->addr() << "!" << std::endl;
 #endif
-				merged_funcs[target] = func->addr();
-				deleted_funcs.insert(target);
+				    merged_funcs[target] = func->addr();
+				    deleted_funcs.insert(target);
 				}
 			    }
 			} // end if(getStackHeight...)
 			else{
 #ifdef DEBUG_TAIL_CALL
-			    std::cerr << "[Tail call detection]: at file " << f_path << "Can't get height of address " << std::hex << bb->lastInsnAddr() << " to " << target << std::endl;
+			    std::cerr << "[Tail call detection]: at file " << f_path << " Can't get height of address " << std::hex << bb->lastInsnAddr() << " to " << target << std::endl;
 #endif
 			}
 			break;

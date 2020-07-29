@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
+#include <string.h>
 
 #include "EhframeParser.h"
 
@@ -24,6 +25,13 @@ void FrameParser::summary(){
 FrameParser::FrameParser(const char* _f_path){
 
     f_path = _f_path;
+
+    if (strstr(_f_path, "ccr")){
+	does_not_work = true;
+    } else {
+	does_not_work = false;
+    }
+
     int fd = -1;
     int res = DW_DLV_ERROR;
     int regtabrulecount = 0;
@@ -270,6 +278,10 @@ bool FrameParser::parse_fde(Dwarf_Debug dbg, Dwarf_Fde fde, Dwarf_Signed fde_num
 }
 
 signed FrameParser::request_stack_height(uint64_t cur_addr, signed &height){
+
+    if (does_not_work)
+	return HEIGHT_DOES_NOT_WORK_ERROR;
+
     // check if current address is in the range of eh_frame
     FrameData* cur_frame = nullptr;
     Dwarf_Error error;
