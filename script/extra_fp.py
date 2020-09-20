@@ -3,20 +3,20 @@
 
 if __name__ == "__main__":
     #f = open('/home/binpang/Desktop/Result/utils_fp_notailcall_x64', 'r')
-    f = open('/tmp/tailcall_utils.fp_O0')
+    f = open('/tmp/tailcall_libs.fp_Of')
     eh_num = 0
     func_num = 0
     jumpNum = 0
     total = 0
     file_num = 0
-    tmp = False
+    tmp = True
     for line in f:
         string = str(line).split(" ")
-        if "Handle File" in str(line): 
-            if "_O0" in str(line):    
-                tmp = True
-            else:
-                tmp = False
+        #if "Handle File" in str(line): 
+            #if "_O2" in str(line):    
+            #    tmp = True
+            #else:
+            #    tmp = False
         if len(string) > 7:
             if string[4] == "ground" and tmp:
                 total += int(string[7].strip())

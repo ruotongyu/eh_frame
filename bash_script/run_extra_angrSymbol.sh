@@ -61,14 +61,10 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   tmp1=$(echo "$dir_name" | cut -d'_' -f 1)
   tmp2=${tmp1}_strip
   bits=$(echo "$dir_name" | cut -d'_' -f 2)
-  flag="x64"
-  if [ $bits = "m32" ]; then
-	flag="x32"
-  fi
 
   sdir=${dir_name/$tmp1/$tmp2}
   base_name=`basename $binary_file`
-  ehRes_file=${dir_name}/ehRes_${base_name}.pb
+  angr_file=${dir_name}/angrSymbol_${base_name}.pb
   #gtBlock_file=${replace_tmp//Block-$PREFIX-/gtBlock_}
   #optimized_dir=`echo $file | rev | cut -d '/' -f2 | rev`
   #echo "optimized dir is $optimized_dir"
@@ -94,6 +90,6 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
   echo "[Handle File]: $file"
   #echo "timeout 1h python3 $TOOL -g $gtBlock_file -i $ehRes_file -b $binary_file -e $ehname -r $ref"
-  echo $TOOL $file $flag $ehRes_file
-  $TOOL $file $flag $ehRes_file
+  echo python3 $TOOL -b $file -o $angr_file
+  #python3 $TOOL -b $file -o $angr_file
 done

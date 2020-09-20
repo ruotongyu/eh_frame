@@ -583,6 +583,7 @@ int main(int argc, char** argv){
 	ScanAddrInGap(gap_regions, dataRef, RefinGap);
 	// indentified functions is all the function start which generated from recursively disassemble 	   the functions found in gaps
 	//set<uint64_t> nops;
+	
 	auto new_funcs = CheckInst(RefinGap, input_string, instructions, gap_regions, eh_functions, pbModule, nops_inst, DataRefMap, ref_addr, invalid_inst);	
 
 	for (auto cur_addr : new_funcs){
@@ -597,7 +598,7 @@ int main(int argc, char** argv){
 	std::map<uint64_t, uint64_t> merged_funcs;
 	tailCallAnalyzer* tailcall_ana = new tailCallAnalyzer(code_obj_eh.get(), &ref_2c, &pc_funcs, input_string);
 	// false means do not use ehframe to get stack height
-	tailcall_ana->analyze(merged_funcs, false);
+	tailcall_ana->analyze(merged_funcs, true);
 
 	dumpCFG(*code_obj_eh, pbModule, merged_funcs);
 	auto output_file = const_cast<char* >(output_string);

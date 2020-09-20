@@ -3,7 +3,7 @@
 
 if __name__ == "__main__":
     #f = open('/home/binpang/Desktop/Result/clients.fn_notailcall_x64', 'r')
-    f = open('/tmp/tailcall_servers.fn_O0')
+    f = open('/tmp/tailcall_clients.fn_O2')
     raw_num = 0
     func_num = 0
     eh_num = 0
@@ -13,14 +13,9 @@ if __name__ == "__main__":
     linker = 0
     pcThunk = 0
     file_num = 0
-    tmp = False
+    tmp = True
     for line in f:
         string = str(line).split(" ")
-        if "Handle File" in str(line):
-            if "_O0" in str(line):
-                tmp = True
-            else:
-                tmp = False
 
         if len(string) > 6 and tmp:
             if string[2] == "Functions":

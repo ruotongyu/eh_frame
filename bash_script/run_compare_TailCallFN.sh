@@ -52,7 +52,7 @@ if [ ! -f $TOOL ]; then
   exit -1
 fi
 
-for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep O0 | grep -v _m32 | grep -v ida_ | grep -v shuffle`; do
+for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep Os | grep -v _m32 | grep -v ida_ | grep -v shuffle`; do
   #echo "current to be handled file is $file"
   replace_tmp1=${file//strip_/}
   binary_file=${replace_tmp1//\.strip/}

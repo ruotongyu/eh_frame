@@ -270,7 +270,7 @@ def readFuncs(mModule, groundTruth):
             # collect the range of padding bytes
                 for inst in bb.instructions:
                     groundTruthFuncRange[inst.va] = inst.size
-
+    print('Number of the function:', len(tmpFuncSet))
     return tmpFuncSet
 
 def readTextSection(binary):
@@ -346,39 +346,18 @@ if __name__ == '__main__':
     parser = optparse.OptionParser()
     parser.add_option("-g", "--groundtruth", dest = "groundtruth", action = "store", \
             type = "string", help = "ground truth file path", default = None)
-    parser.add_option("-i", "--input", dest = "input", action = "store", \
-            type = "string", help = "compared file path", default = None)
     parser.add_option("-b", "--binaryFile", dest = "binaryFile", action = "store", \
             type = "string", help = "binary file path", default = None)
-    parser.add_option("-e", "--ehframe", dest = "ehframe", action = "store", \
-            type = "string", help = "ehframe file path", default = None)
-    parser.add_option("-r", "--ref", dest = "ref", action = "store", \
-            type = "string", help = "reference file path", default = None)
 
     (options, args) = parser.parse_args()
 
     assert options.groundtruth != None, "Please input the ground truth file!"
-    assert options.input!= None, "Please input the compared file!"
     assert options.binaryFile != None, "Please input the binary file!"
-    assert options.ehframe != None, "Please input the ehframe file!"
-    assert options.ref != None, "Please input the ref file!"
     strip_binary = str(options.binaryFile) + ".strip"
     readTextSection(options.binaryFile)
     logging.debug("compared file is %s" % options.binaryFile)
     getLinkerFunctionAddr(options.binaryFile)
     mModule1 = blocks_pb2.module()
-    mModule2 = blocks_pb2.module()
-    mModule3 = blocks_pb2.module()
-    mModule4 = blocks_pb2.module()
-    refInf1 = refInf_pb2.RefList()
-    try:
-        r1 = open(options.ref, 'rb')
-        refInf1.ParseFromString(r1.read())
-        r1.close()
-    except IOError:
-        print(options.ref)
-        print("Could not open reference file\n")
-        exit(-1)
     try:
         f1 = open(options.groundtruth, 'rb')
         mModule1.ParseFromString(f1.read())
@@ -387,32 +366,4 @@ if __name__ == '__main__':
         print(options.groundtruth)
         print("Could not open Ground Truth file\n")
         exit(-1)
-    try:
-        f2 = open(options.input, 'rb')
-        mModule2.ParseFromString(f2.read())
-        f2.close()
-    except IOError:
-        print(options.input)
-        print("Could not open the input file\n")
-        exit(-1)
-    try:
-        f3 = open(options.ehframe, 'rb')
-        mModule3.ParseFromString(f3.read())
-        f3.close()
-    except IOError:
-        print("Hello", options.ehframe)
-        print("Could not open the ehframe file\n")
-        exit(-1)
     truthFuncs = readFuncs(mModule1, True)
-    pbFuncs = readFuncs(mModule2, False)
-    ehFuncs = readFuncs(mModule3, False)
-    ScanBB = getBBRange(mModule3)
-    gtRef = getReference(refInf1)
-    not_included = checkGroundTruthFuncNotIncluded(groundTruthFuncRange, options.binaryFile)
-    if not_included != None:
-        logging.debug("Append the not included functions! {0}".format(not_included))
-        truthFuncs |= not_included
-    
-    RawEhFuncs = readFuncsFromEhFrame(strip_binary)
-
-    compareFuncs(truthFuncs, pbFuncs, ehFuncs, RawEhFuncs, ScanBB, gtRef)

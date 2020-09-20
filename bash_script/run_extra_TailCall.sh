@@ -52,7 +52,7 @@ if [ ! -f $TOOL ]; then
   exit -1
 fi
 
-for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v O0 | grep -v O2 | grep -v O3 | grep -v Os | grep -v Of | grep -v ccr_m32 | grep -v ida_ | grep -v shuffle`; do
+for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v O0 | grep -v O1 | grep -v _m32 | grep -v ida_ | grep -v shuffle`; do
   #echo "current to be handled file is $file"
   replace_tmp1=${file//strip_/}
   binary_file=${replace_tmp1//\.strip/}
@@ -93,6 +93,10 @@ for file in `find $DIR -name *.strip | grep -v frame | grep -v _strip | grep -v 
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
   echo "<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>"
   echo "[Handle File]: $file"
+
+  echo "[Handle File]: $file" >> /tmp/tmp_time.log
   #echo $TOOL $file $flag $ehTailCall_file "2>&1 | tee /home/binpang/Desktop/Result/utils_result$output_path"
-  $TOOL $file $flag $ehTailCall_file  2>&1 | tee /home/binpang/Desktop/Result/libs_result/$output_path
+  #\time -o /tmp/tmp_time.log -a $TOOL $file $flag $ehTailCall_file  2>&1 | tee /home/binpang/Desktop/Result/libs_result/$output_path
+  \time -o /tmp/tmp_time.log -a $TOOL $file $flag /tmp/tmp.pb 2>&1 | tee /home/binpang/Desktop/Result/libs_result/$output_path
+  echo "" >> /tmp/tmp_time.log
 done
